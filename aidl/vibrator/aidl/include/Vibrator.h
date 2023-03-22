@@ -35,6 +35,7 @@
 
 #include <aidl/android/hardware/vibrator/BnVibrator.h>
 #include <thread>
+#include <mutex>
 
 namespace aidl {
 namespace android {
@@ -59,6 +60,7 @@ private:
     int mVibraFd;
     int16_t mCurrAppId;
     int16_t mCurrMagnitude;
+    std::mutex mtx;
 };
 
 class LedVibratorDevice {
