@@ -18,6 +18,7 @@ import androidx.compose.animation.togetherWith
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -33,8 +34,10 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material.icons.Icons
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
@@ -88,6 +91,7 @@ internal fun DolbyComposeScreen(
 ) {
     var destination by rememberSaveable { mutableStateOf(DolbyDestination.HOME) }
     var showReset by remember { mutableStateOf(false) }
+    var showAppProfiles by remember { mutableStateOf(false) }
     val enabled by controller.enabled.collectAsState()
     val profile by controller.activeProfile.collectAsState()
     var refreshToken by remember { mutableStateOf(0) }
@@ -166,7 +170,15 @@ internal fun DolbyComposeScreen(
                         enabled = enabled,
                         profile = profile,
                         bass = bass,
-                        onEnabledChange = controller::setDsOnAndPersist,
+                        onAppProfilesClick = { showAppProfiles = true },
+                        onEnabledChange = { value ->
+                            controller.setDsOnAndPersist(value)
+                            val appProfiles = AppProfileManager(context)
+                            if (appProfiles.isEnabled && appProfiles.hasUsageAccess()) {
+                                if (value) DolbyAppProfileService.start(context)
+                                else DolbyAppProfileService.stop(context)
+                            }
+                        },
                         onProfileSelected = { selected ->
                             controller.profile = selected
                             PreferenceManager.getDefaultSharedPreferences(context).edit()
@@ -256,6 +268,10 @@ internal fun DolbyComposeScreen(
             },
         )
     }
+
+    if (showAppProfiles) {
+        AppProfileSheet(context = context, onDismiss = { showAppProfiles = false })
+    }
 }
 
 @Composable
@@ -334,6 +350,7 @@ private fun HomePage(
     enabled: Boolean,
     profile: Int,
     bass: Boolean,
+    onAppProfilesClick: () -> Unit,
     onEnabledChange: (Boolean) -> Unit,
     onProfileSelected: (Int) -> Unit,
     onBassChange: (Boolean) -> Unit,
@@ -362,6 +379,31 @@ private fun HomePage(
         }
         if (enabled) {
             ProfilePicker(profile = profile, onSelected = onProfileSelected)
+            Card(
+                modifier = Modifier.fillMaxWidth().clickable(onClick = onAppProfilesClick),
+                shape = MaterialTheme.shapes.extraLarge,
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+            ) {
+                Row(
+                    Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 16.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(14.dp),
+                ) {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_dolby),
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                    )
+                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Text(stringResource(R.string.dolby_app_profiles), style = MaterialTheme.typography.titleMedium)
+                        Text(stringResource(R.string.dolby_app_profiles_card_summary),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    Text("›", style = MaterialTheme.typography.headlineSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
             Text(stringResource(R.string.dolby_category_settings),
                 style = MaterialTheme.typography.titleLarge,
                 modifier = Modifier.padding(start = 4.dp))
@@ -548,7 +590,6 @@ private fun ChoiceSetting(
     values: Array<String>,
     onSelected: (Int) -> Unit,
 ) {
-    var expanded by remember { mutableStateOf(false) }
     val index = values.indexOf(selected.toString()).coerceAtLeast(0)
     Card(shape = MaterialTheme.shapes.extraLarge,
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)) {
@@ -561,25 +602,19 @@ private fun ChoiceSetting(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            Surface(onClick = { expanded = true }, shape = MaterialTheme.shapes.large,
-                color = MaterialTheme.colorScheme.surfaceContainerHigh) {
-                Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 14.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically) {
-                    Text(entries.getOrElse(index) { "" }, style = MaterialTheme.typography.bodyLarge)
-                    Icon(
-                        painter = painterResource(R.drawable.ic_expand_more_24),
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
-                    )
-                }
-            }
-            DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-                entries.forEachIndexed { i, label ->
-                    DropdownMenuItem(text = { Text(label) }, onClick = {
-                        expanded = false
-                        onSelected(i)
-                    })
+            entries.indices.toList().chunked(2).forEach { rowIndices ->
+                Row(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    rowIndices.forEach { i ->
+                        FilterChip(
+                            modifier = Modifier.weight(1f),
+                            selected = i == index,
+                            onClick = { onSelected(i) },
+                            label = { Text(entries[i], maxLines = 1) },
+                        )
+                    }
                 }
             }
         }

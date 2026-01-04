@@ -23,7 +23,11 @@ class BootCompletedReceiver : BroadcastReceiver() {
                 DolbyController.getInstance(context)
             }
             Intent.ACTION_BOOT_COMPLETED -> {
-                DolbyController.getInstance(context)
+                val controller = DolbyController.getInstance(context)
+                val appProfiles = AppProfileManager(context)
+                if (controller.dsOn && appProfiles.isEnabled && appProfiles.hasUsageAccess()) {
+                    DolbyAppProfileService.start(context)
+                }
             }
             Intent.ACTION_USER_UNLOCKED -> {
                 DolbyController.getInstance(context).onUserUnlocked()

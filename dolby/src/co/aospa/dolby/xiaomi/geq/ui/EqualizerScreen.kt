@@ -66,13 +66,6 @@ fun EqualizerScreen(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
-                if (activeProfile == 0) {
-                    Text(
-                        stringResource(R.string.dolby_dynamic_eq_note),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
                 PresetSelector(viewModel = viewModel)
                 EqualizerBands(viewModel = viewModel)
             }
