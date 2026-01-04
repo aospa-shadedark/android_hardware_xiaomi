@@ -36,6 +36,7 @@ internal class DolbyController private constructor(
     val enabled = _enabled.asStateFlow()
     private val _activeProfile = MutableStateFlow(0)
     val activeProfile = _activeProfile.asStateFlow()
+    private var appProfileOverride: Int? = null
 
     // Restore current profile on every media session
     private val playbackCallback = object : AudioPlaybackCallback() {
@@ -98,9 +99,8 @@ internal class DolbyController private constructor(
             }
         set(value) {
             dlog(TAG, "setProfile: $value")
-            checkEffect()
-            dolbyEffect.profile = value
-            _activeProfile.value = value
+            appProfileOverride = null
+            applyProfile(value)
         }
 
     init {
@@ -219,7 +219,21 @@ internal class DolbyController private constructor(
     private fun setCurrentProfile() {
         dlog(TAG, "setCurrentProfile")
         val prefs = PreferenceManager.getDefaultSharedPreferences(context)
-        profile = prefs.getString(DolbyConstants.PREF_PROFILE, "0" /*dynamic*/)!!.toInt()
+        applyProfile(
+            appProfileOverride
+                ?: prefs.getString(DolbyConstants.PREF_PROFILE, "0" /*dynamic*/)!!.toInt()
+        )
+    }
+
+    internal fun setAppProfileOverride(profile: Int?) {
+        appProfileOverride = profile
+        setCurrentProfile()
+    }
+
+    private fun applyProfile(value: Int) {
+        checkEffect()
+        dolbyEffect.profile = value
+        _activeProfile.value = value
     }
 
     fun setDsOnAndPersist(dsOn: Boolean) {

@@ -13,8 +13,10 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
@@ -89,11 +91,13 @@ fun PresetSelector(viewModel: EqualizerViewModel) {
                     .focusProperties { canFocus = false },
             )
             FilledTonalButton(
-                modifier = Modifier.heightIn(min = 56.dp),
+                modifier = Modifier.height(56.dp).widthIn(min = 104.dp),
                 onClick = {
                     if (currentPreset.isUserDefined) showResetConfirmDialog = true
                     else viewModel.reset()
                 },
+                shape = MaterialTheme.shapes.large,
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
             ) {
                 Icon(
                     imageVector = ImageVector.vectorResource(R.drawable.reset_settings_24px),
