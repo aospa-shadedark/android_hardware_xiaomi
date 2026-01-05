@@ -61,20 +61,22 @@
     <string name="dolby_eq_neutral_gain">0 dB</string>
     <string name="dolby_eq_max_gain">+10 dB</string>
     <string name="dolby_eq_curve_description">Select a frequency band, then adjust its level.</string>
+    <string name="dolby_eq_band_guide">Only 10 bands are editable here. Imported 15- or 20-band presets are adapted to these controls; Dolby fills the remaining points in its 20-band curve.</string>
     <string name="dolby_eq_band_gain">Gain for %1$s</string>
     <string name="dolby_geq_save_new_preset">Save as new preset</string>
     <string name="dolby_geq_manage_presets">Manage presets</string>
-    <string name="dolby_geq_preset_help">Choose a preset, or import a compatible ten-band preset file.</string>
+    <string name="dolby_geq_preset_help">Only 10 bands are editable here. Imported 15- or 20-band presets are adapted to these controls; Dolby fills the remaining points in its 20-band curve. Exports contain the 10-band curve.</string>
     <string name="dolby_geq_custom_preset_hint">Edits are saved automatically</string>
     <string name="dolby_geq_built_in_presets">Dolby presets</string>
     <string name="dolby_geq_your_presets">Your presets</string>
     <string name="dolby_geq_active_preset">Active preset</string>
     <string name="dolby_geq_import_preset">Import preset</string>
     <string name="dolby_geq_export_preset">Export preset</string>
+    <string name="dolby_geq_export_hint">Save a custom preset to enable export.</string>
     <string name="dolby_geq_import_title">Import preset</string>
     <string name="dolby_geq_preset_actions">Preset actions</string>
     <string name="dolby_geq_transfer_error_title">Preset unavailable</string>
-    <string name="dolby_geq_transfer_error">This file could not be read as a compatible ten-band preset.</string>
+    <string name="dolby_geq_transfer_error">Choose a valid .ldp preset with 10, 15, or 20 bands.</string>
 
     <!-- Dolby profiles -->
     <string name="dolby_profile_dynamic">Dynamic</string>

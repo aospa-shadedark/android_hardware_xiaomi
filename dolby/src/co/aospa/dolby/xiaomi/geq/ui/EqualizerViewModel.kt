@@ -166,6 +166,17 @@ class EqualizerViewModel(
         return null
     }
 
+    fun importPreset(name: String, bandGains: List<co.aospa.dolby.xiaomi.geq.data.BandGain>): PresetNameValidationError? {
+        val normalizedName = name.trim()
+        validatePresetName(normalizedName)?.let { return it }
+        _preset.value = Preset(
+            name = normalizedName,
+            bandGains = bandGains,
+            isUserDefined = true,
+        )
+        return null
+    }
+
     fun renamePreset(preset: Preset, name: String): PresetNameValidationError? {
         dlog(TAG, "renamePreset($preset, $name)")
         // create a preset with the new name and same gains
