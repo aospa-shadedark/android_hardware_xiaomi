@@ -21,6 +21,7 @@ android_app {
         "SpaLib",
         "androidx.activity_activity-compose",
         "androidx.compose.material3_material3",
+        "androidx.compose.material_material-icons-extended",
         "androidx.compose.runtime_runtime",
         "androidx.preference_preference",
         "co.aospa.resources",

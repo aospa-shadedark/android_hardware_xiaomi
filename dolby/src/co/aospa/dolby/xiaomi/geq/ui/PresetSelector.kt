@@ -6,7 +6,11 @@
 
 package co.aospa.dolby.xiaomi.geq.ui
 
+import android.content.Context
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
@@ -24,8 +28,12 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.FileUpload
+import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
@@ -37,6 +45,8 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
@@ -52,8 +62,15 @@ import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.res.vectorResource
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import co.aospa.dolby.xiaomi.R
+import co.aospa.dolby.xiaomi.geq.data.Preset
+import co.aospa.dolby.xiaomi.geq.data.PresetFileTransfer
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import androidx.compose.runtime.rememberCoroutineScope
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -66,6 +83,25 @@ fun PresetSelector(viewModel: EqualizerViewModel) {
     var showRenamePresetDialog by remember { mutableStateOf(false) }
     var showDeleteConfirmDialog by remember { mutableStateOf(false) }
     var showResetConfirmDialog by remember { mutableStateOf(false) }
+    var importedPreset by remember { mutableStateOf<Preset?>(null) }
+    var pendingExport by remember { mutableStateOf<Preset?>(null) }
+    var transferError by remember { mutableStateOf(false) }
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val importLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) scope.launch {
+            val result = withContext(Dispatchers.IO) { runCatching { PresetFileTransfer.read(context, uri) } }
+            result.onSuccess { importedPreset = it }.onFailure { transferError = true }
+        }
+    }
+    val exportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
+        val preset = pendingExport
+        if (uri != null && preset != null) scope.launch {
+            val result = withContext(Dispatchers.IO) { runCatching { PresetFileTransfer.write(context, uri, preset) } }
+            if (result.isFailure) transferError = true
+            pendingExport = null
+        } else pendingExport = null
+    }
 
     ExposedDropdownMenuBox(
         expanded = expanded,
@@ -169,6 +205,34 @@ fun PresetSelector(viewModel: EqualizerViewModel) {
                     Icon(Icons.Default.Add, contentDescription = null)
                     Text(stringResource(R.string.dolby_geq_save_new_preset), Modifier.padding(start = 8.dp))
                 }
+                Spacer(Modifier.height(8.dp))
+                OutlinedButton(
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
+                    onClick = { importLauncher.launch(arrayOf("application/json", "application/octet-stream")) },
+                ) {
+                    Icon(Icons.Default.FileDownload, contentDescription = null)
+                    Text(stringResource(R.string.dolby_geq_import_preset), Modifier.padding(start = 8.dp))
+                }
+                Spacer(Modifier.height(8.dp))
+                OutlinedButton(
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
+                    enabled = currentPreset.isUserDefined,
+                    onClick = {
+                        pendingExport = currentPreset
+                        exportLauncher.launch("${currentPreset.name.orEmpty().replace(' ', '_')}.ldp")
+                    },
+                ) {
+                    Icon(Icons.Default.FileUpload, contentDescription = null)
+                    Text(stringResource(R.string.dolby_geq_export_preset), Modifier.padding(start = 8.dp))
+                }
+                if (!currentPreset.isUserDefined) {
+                    Text(
+                        text = stringResource(R.string.dolby_geq_export_hint),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 4.dp),
+                    )
+                }
                 Spacer(Modifier.height(12.dp))
                 LazyColumn(modifier = Modifier.fillMaxWidth().heightIn(max = 420.dp)) {
                     item {
@@ -231,6 +295,30 @@ fun PresetSelector(viewModel: EqualizerViewModel) {
             onDismissDialog = { showRenamePresetDialog = false },
         )
     }
+    importedPreset?.let { imported ->
+        PresetNameDialog(
+            title = stringResource(R.string.dolby_geq_import_title),
+            presetName = imported.name.orEmpty(),
+            onPresetNameSet = { name ->
+                viewModel.importPreset(name, imported.bandGains).also {
+                    if (it == null) showPresetManager = false
+                }
+            },
+            onDismissDialog = { importedPreset = null },
+        )
+    }
+    if (transferError) {
+        AlertDialog(
+            onDismissRequest = { transferError = false },
+            title = { Text(stringResource(R.string.dolby_geq_transfer_error_title)) },
+            text = { Text(stringResource(R.string.dolby_geq_transfer_error)) },
+            confirmButton = {
+                androidx.compose.material3.TextButton(onClick = { transferError = false }) {
+                    Text(stringResource(android.R.string.ok))
+                }
+            },
+        )
+    }
     if (showDeleteConfirmDialog) {
         ConfirmationDialog(
             text = stringResource(R.string.dolby_geq_delete_preset_prompt),
@@ -249,12 +337,13 @@ fun PresetSelector(viewModel: EqualizerViewModel) {
 
 @Composable
 private fun PresetRow(
-    preset: co.aospa.dolby.xiaomi.geq.data.Preset,
+    preset: Preset,
     selected: Boolean,
     onSelect: () -> Unit,
     onRename: (() -> Unit)? = null,
     onDelete: (() -> Unit)? = null,
 ) {
+    var actionsExpanded by remember(preset) { mutableStateOf(false) }
     ListItem(
         headlineContent = { Text(preset.name ?: stringResource(R.string.dolby_preset_custom)) },
         supportingContent = if (preset.isUserDefined) {
@@ -265,12 +354,21 @@ private fun PresetRow(
         } else null,
         trailingContent = if (preset.isUserDefined) {
             {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    IconButton(onClick = onRename ?: {}) {
-                        Icon(Icons.Default.Edit, contentDescription = stringResource(R.string.dolby_geq_rename_preset))
+                Box {
+                    IconButton(onClick = { actionsExpanded = true }) {
+                        Icon(Icons.Default.MoreVert, contentDescription = stringResource(R.string.dolby_geq_preset_actions))
                     }
-                    IconButton(onClick = onDelete ?: {}) {
-                        Icon(Icons.Default.Delete, contentDescription = stringResource(R.string.dolby_geq_delete_preset))
+                    DropdownMenu(expanded = actionsExpanded, onDismissRequest = { actionsExpanded = false }) {
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.dolby_geq_rename_preset)) },
+                            leadingIcon = { Icon(Icons.Default.Edit, contentDescription = null) },
+                            onClick = { actionsExpanded = false; onRename?.invoke() },
+                        )
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.dolby_geq_delete_preset)) },
+                            leadingIcon = { Icon(Icons.Default.Delete, contentDescription = null) },
+                            onClick = { actionsExpanded = false; onDelete?.invoke() },
+                        )
                     }
                 }
             }
