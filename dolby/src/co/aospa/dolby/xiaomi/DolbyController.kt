@@ -13,6 +13,7 @@ import android.media.AudioManager
 import android.media.AudioManager.AudioPlaybackCallback
 import android.media.AudioPlaybackConfiguration
 import android.os.Handler
+import android.os.UserManager
 import android.util.Log
 import androidx.preference.PreferenceManager
 import co.aospa.dolby.xiaomi.DolbyConstants.Companion.dlog
@@ -181,10 +182,18 @@ internal class DolbyController private constructor(
     }
 
     private fun maybeMigratePresets() {
-        val prefs = PreferenceManager.getDefaultSharedPreferences(context)
+        val deContext = context.createDeviceProtectedStorageContext()
+        val prefs = deContext.getSharedPreferences("dolby_migration", Context.MODE_PRIVATE)
         if (prefs.getBoolean(PREF_KEY_PRESETS_MIGRATED, false)) {
             return
         }
+
+        val userManager = context.getSystemService(UserManager::class.java)
+        if (userManager == null || !userManager.isUserUnlocked) {
+            dlog(TAG, "maybeMigratePresets: user not unlocked, skipping")
+            return
+        }
+
         val ceContext = context.createCredentialProtectedStorageContext()
         val cePrefs = ceContext.getSharedPreferences(PREF_PRESETS, Context.MODE_PRIVATE)
         if (cePrefs.all.isEmpty()) {
