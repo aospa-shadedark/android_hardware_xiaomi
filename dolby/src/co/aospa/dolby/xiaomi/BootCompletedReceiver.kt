@@ -23,7 +23,10 @@ class BootCompletedReceiver : BroadcastReceiver() {
                 DolbyController.getInstance(context)
             }
             Intent.ACTION_BOOT_COMPLETED -> {
-                DolbyController.getInstance(context).onBootCompleted()
+                DolbyController.getInstance(context)
+            }
+            Intent.ACTION_USER_UNLOCKED -> {
+                DolbyController.getInstance(context).onUserUnlocked()
             }
             else -> Log.e(TAG, "unhandled intent action")
         }
