@@ -114,8 +114,8 @@ internal class DolbyController private constructor(
         dlog(TAG, "initialized")
     }
 
-    fun onBootCompleted () {
-        dlog(TAG, "onBootCompleted()")
+    fun onUserUnlocked() {
+        dlog(TAG, "onUserUnlocked()")
 
         // Migrate presets from credential protected storage if needed
         maybeMigratePresets()
