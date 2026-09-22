@@ -89,6 +89,40 @@ enum composeEvent {
     STOP_COMPOSE = 0,
 };
 
+#ifdef USE_EFFECT_STREAM
+/* Primitives backed by their own fifo data, filled once when the HAL starts */
+static std::vector<CompositePrimitive> sSupportedPrimitives;
+
+static bool isPrimitiveStreamSupported(CompositePrimitive primitive) {
+    uint32_t primitiveId = static_cast<uint32_t>(primitive);
+    const struct effect_stream *stream = get_effect_stream(primitiveId | PRIMITIVE_ID_MASK);
+
+    /* A missing primitive falls back to the click effect, whose id doesn't match */
+    return stream != NULL && stream->effect_id == primitiveId;
+}
+
+/*
+ * The effect library caches the streams without locking, so load everything
+ * up front instead of racing the compose thread on first use.
+ */
+static void loadEffectStreams() {
+    for (int32_t id = static_cast<int32_t>(Effect::CLICK);
+         id <= static_cast<int32_t>(Effect::HEAVY_CLICK); id++)
+        get_effect_stream(id);
+
+    for (int32_t id = static_cast<int32_t>(CompositePrimitive::CLICK);
+         id <= static_cast<int32_t>(CompositePrimitive::LOW_TICK); id++) {
+        CompositePrimitive primitive = static_cast<CompositePrimitive>(id);
+
+        if (isPrimitiveStreamSupported(primitive))
+            sSupportedPrimitives.push_back(primitive);
+    }
+
+    if (!sSupportedPrimitives.empty())
+        sSupportedPrimitives.insert(sSupportedPrimitives.begin(), CompositePrimitive::NOOP);
+}
+#endif
+
 InputFFDevice::InputFFDevice()
 {
     DIR *dp;
@@ -470,6 +504,10 @@ Vibrator::Vibrator() {
     if (!ff.mSupportEffects)
         return;
 
+#ifdef USE_EFFECT_STREAM
+    loadEffectStreams();
+#endif
+
     if (pipe(pipefd)) {
         ALOGE("Failed to get pipefd error=%d", errno);
         return;
@@ -525,11 +563,16 @@ ndk::ScopedAStatus Vibrator::getCapabilities(int32_t* _aidl_return) {
         *_aidl_return |= IVibrator::CAP_AMPLITUDE_CONTROL;
     if (ff.mSupportEffects) {
         *_aidl_return |= IVibrator::CAP_PERFORM_CALLBACK;
+#ifdef USE_EFFECT_STREAM
+        if (!sSupportedPrimitives.empty())
+            *_aidl_return |= IVibrator::CAP_COMPOSE_EFFECTS;
+#else
         int32_t primitiveDuration = 0;
         uint32_t primitiveId = static_cast<uint32_t>(CompositePrimitive::CLICK);
         getPrimitiveDurationFromSysfs(primitiveId, &primitiveDuration);
         if (primitiveDuration != 0)
             *_aidl_return |= IVibrator::CAP_COMPOSE_EFFECTS;
+#endif
     }
     if (ff.mSupportExternalControl)
         *_aidl_return |= IVibrator::CAP_EXTERNAL_CONTROL;
@@ -688,6 +731,9 @@ ndk::ScopedAStatus Vibrator::getCompositionSizeMax(int32_t* maxSize) {
 }
 
 ndk::ScopedAStatus Vibrator::getSupportedPrimitives(std::vector<CompositePrimitive>* supported) {
+#ifdef USE_EFFECT_STREAM
+    *supported = sSupportedPrimitives;
+#else
     *supported =  {
         CompositePrimitive::NOOP,   CompositePrimitive::CLICK,
         CompositePrimitive::THUD,   CompositePrimitive::SPIN,
@@ -695,6 +741,7 @@ ndk::ScopedAStatus Vibrator::getSupportedPrimitives(std::vector<CompositePrimiti
         CompositePrimitive::QUICK_FALL, CompositePrimitive::LIGHT_TICK,
         CompositePrimitive::LOW_TICK,
     };
+#endif
     return ndk::ScopedAStatus::ok();
 }
 
@@ -765,11 +812,18 @@ ndk::ScopedAStatus Vibrator::getPrimitiveDuration(CompositePrimitive primitive,
     int ret = 0;
 
 #ifdef USE_EFFECT_STREAM
-    primitive_id |= PRIMITIVE_ID_MASK ;
     const struct effect_stream *stream;
-    stream = get_effect_stream(primitive_id);
-    if (stream != NULL && stream->play_rate_hz != 0)
-        *durationMs = ((stream->length * 1000) / stream->play_rate_hz) + 1;
+
+    *durationMs = 0;
+    if (std::find(sSupportedPrimitives.begin(), sSupportedPrimitives.end(), primitive) ==
+            sSupportedPrimitives.end())
+        return ndk::ScopedAStatus::fromExceptionCode(EX_UNSUPPORTED_OPERATION);
+
+    if (primitive != CompositePrimitive::NOOP) {
+        stream = get_effect_stream(primitive_id | PRIMITIVE_ID_MASK);
+        if (stream != NULL && stream->play_rate_hz != 0)
+            *durationMs = ((stream->length * 1000) / stream->play_rate_hz) + 1;
+    }
 
     ALOGD("primitive-%d duration is %dms", primitive, *durationMs);
     return ndk::ScopedAStatus::ok();
@@ -814,7 +868,22 @@ void Vibrator::composePlayThread(Vibrator *vibrator,
             }
         }
 
+#ifdef USE_EFFECT_STREAM
+        /*
+         * NOOP only pads the composition and a zero scale is silent, so just
+         * wait for the primitive's duration instead of uploading fifo data.
+         */
+        if (e.primitive == CompositePrimitive::NOOP || e.scale == 0.0f) {
+            int32_t durationMs = 0;
+
+            vibrator->getPrimitiveDuration(e.primitive, &durationMs);
+            playLengthMs = durationMs;
+        } else {
+            vibrator->ff.playPrimitive((static_cast<int>(e.primitive)), e.scale, &playLengthMs);
+        }
+#else
         vibrator->ff.playPrimitive((static_cast<int>(e.primitive)), e.scale, &playLengthMs);
+#endif
         nfd = epoll_wait(vibrator->epollfd, &events, 1, playLengthMs);
         if (nfd == -1 && (errno != EINTR)) {
             ALOGE("Failed to wait sleep playLengthMs, error=%d", errno);
