@@ -122,6 +122,10 @@ static void loadEffectStreams() {
     };
 
     for (Effect effect : effects) {
+        /* The library builds a missing double click from the click stream, so it needs one */
+        if (effect == Effect::DOUBLE_CLICK && !isEffectStreamSupported(Effect::CLICK))
+            continue;
+
         if (isEffectStreamSupported(effect))
             sSupportedEffects.push_back(effect);
     }
