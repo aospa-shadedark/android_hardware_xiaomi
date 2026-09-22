@@ -90,8 +90,17 @@ enum composeEvent {
 };
 
 #ifdef USE_EFFECT_STREAM
-/* Primitives backed by their own fifo data, filled once when the HAL starts */
+/* Effects and primitives backed by their own fifo data, filled once when the HAL starts */
+static std::vector<Effect> sSupportedEffects;
 static std::vector<CompositePrimitive> sSupportedPrimitives;
+
+static bool isEffectStreamSupported(Effect effect) {
+    uint32_t effectId = static_cast<uint32_t>(effect);
+    const struct effect_stream *stream = get_effect_stream(effectId);
+
+    /* A missing effect falls back to the click effect, whose id doesn't match */
+    return stream != NULL && stream->effect_id == effectId;
+}
 
 static bool isPrimitiveStreamSupported(CompositePrimitive primitive) {
     uint32_t primitiveId = static_cast<uint32_t>(primitive);
@@ -106,9 +115,16 @@ static bool isPrimitiveStreamSupported(CompositePrimitive primitive) {
  * up front instead of racing the compose thread on first use.
  */
 static void loadEffectStreams() {
-    for (int32_t id = static_cast<int32_t>(Effect::CLICK);
-         id <= static_cast<int32_t>(Effect::HEAVY_CLICK); id++)
-        get_effect_stream(id);
+    /* CLICK goes first, missing effects fall back to it. RINGTONE_* are never requested. */
+    const Effect effects[] = {
+        Effect::CLICK, Effect::DOUBLE_CLICK, Effect::TICK, Effect::THUD,
+        Effect::POP, Effect::HEAVY_CLICK, Effect::TEXTURE_TICK,
+    };
+
+    for (Effect effect : effects) {
+        if (isEffectStreamSupported(effect))
+            sSupportedEffects.push_back(effect);
+    }
 
     for (int32_t id = static_cast<int32_t>(CompositePrimitive::CLICK);
          id <= static_cast<int32_t>(CompositePrimitive::LOW_TICK); id++) {
@@ -645,8 +661,14 @@ ndk::ScopedAStatus Vibrator::perform(Effect effect, EffectStrength es, const std
             return ndk::ScopedAStatus(AStatus_fromExceptionCode(EX_UNSUPPORTED_OPERATION));
     }
     else {
+#ifdef USE_EFFECT_STREAM
+        if (std::find(sSupportedEffects.begin(), sSupportedEffects.end(), effect) ==
+                sSupportedEffects.end())
+            return ndk::ScopedAStatus(AStatus_fromExceptionCode(EX_UNSUPPORTED_OPERATION));
+#else
         if (effect < Effect::CLICK ||  effect > Effect::HEAVY_CLICK)
             return ndk::ScopedAStatus(AStatus_fromExceptionCode(EX_UNSUPPORTED_OPERATION));
+#endif
     }
 
     if (es != EffectStrength::LIGHT && es != EffectStrength::MEDIUM && es != EffectStrength::STRONG)
@@ -678,8 +700,12 @@ ndk::ScopedAStatus Vibrator::getSupportedEffects(std::vector<Effect>* _aidl_retu
                          Effect::POP, Effect::HEAVY_CLICK, Effect::RINGTONE_12,
                          Effect::RINGTONE_13, Effect::RINGTONE_14, Effect::RINGTONE_15};
     else
+#ifdef USE_EFFECT_STREAM
+        *_aidl_return = sSupportedEffects;
+#else
         *_aidl_return = {Effect::CLICK, Effect::DOUBLE_CLICK, Effect::TICK, Effect::THUD,
                          Effect::POP, Effect::HEAVY_CLICK};
+#endif
 
     return ndk::ScopedAStatus::ok();
 }
