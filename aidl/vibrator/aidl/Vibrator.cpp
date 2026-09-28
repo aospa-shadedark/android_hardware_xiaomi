@@ -607,22 +607,28 @@ ndk::ScopedAStatus Vibrator::getCapabilities(int32_t* _aidl_return) {
 ndk::ScopedAStatus Vibrator::off() {
     int ret;
     int composeEven = STOP_COMPOSE;
+    bool stopComposeFailed = false;
 
     ALOGD("QTI Vibrator off");
-    if (ledVib.mDetected)
-        ret = ledVib.off();
-    else
-        ret = ff.off();
-    if (ret != 0)
-        return ndk::ScopedAStatus(AStatus_fromExceptionCode(EX_SERVICE_SPECIFIC));
 
+    /*
+     * Stop the composition before turning off the current effect, so a failure
+     * there can't leave the compose thread playing the remaining primitives.
+     */
     if (inComposition) {
         ret = write(pipefd[1], &composeEven, sizeof(composeEven));
         if (ret < 0) {
             ALOGE("Failed to send STOP_COMPOSE event");
-            return ndk::ScopedAStatus(AStatus_fromExceptionCode(EX_SERVICE_SPECIFIC));
+            stopComposeFailed = true;
         }
     }
+
+    if (ledVib.mDetected)
+        ret = ledVib.off();
+    else
+        ret = ff.off();
+    if (ret != 0 || stopComposeFailed)
+        return ndk::ScopedAStatus(AStatus_fromExceptionCode(EX_SERVICE_SPECIFIC));
 
     return ndk::ScopedAStatus::ok();
 }
