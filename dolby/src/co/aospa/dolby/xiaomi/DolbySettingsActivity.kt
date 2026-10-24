@@ -1,69 +1,42 @@
 /*
- * Copyright (C) 2023-25 Paranoid Android
+ * Copyright (C) 2023-26 Paranoid Android
  *
  * SPDX-License-Identifier: Apache-2.0
  */
 
 package co.aospa.dolby.xiaomi
 
-import android.app.AlertDialog
 import android.os.Bundle
-import android.view.Menu
-import android.view.MenuItem
 import android.widget.Toast
-import co.aospa.dolby.xiaomi.preference.DolbySettingsFragment
-import com.android.settingslib.collapsingtoolbar.CollapsingToolbarBaseActivity
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.setContent
+import androidx.activity.viewModels
+import co.aospa.dolby.xiaomi.geq.ui.EqualizerViewModel
+import com.android.settingslib.spa.framework.theme.SettingsTheme
 
-class DolbySettingsActivity : CollapsingToolbarBaseActivity() {
+class DolbySettingsActivity : ComponentActivity() {
 
-    private lateinit var dolbyController: DolbyController
+    private val dolbyController by lazy { DolbyController.getInstance(this) }
+    private val equalizerViewModel: EqualizerViewModel by viewModels { EqualizerViewModel.Factory }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        supportFragmentManager
-            .beginTransaction()
-            .replace(
-                com.android.settingslib.collapsingtoolbar.R.id.content_frame,
-                DolbySettingsFragment(),
-                TAG
-            )
-            .commit()
-        dolbyController = DolbyController.getInstance(this)
-    }
-
-    override fun onCreateOptionsMenu(menu: Menu): Boolean {
-        menu
-            .add(Menu.NONE, MENU_RESET, Menu.NONE, R.string.dolby_reset_all)
-            .setIcon(R.drawable.reset_wrench_24px)
-            .setShowAsAction(MenuItem.SHOW_AS_ACTION_IF_ROOM)
-        return super.onCreateOptionsMenu(menu)
-    }
-
-    override fun onOptionsItemSelected(item: MenuItem): Boolean =
-        when (item.itemId) {
-            MENU_RESET -> {
-                confirmReset()
-                true
+        setContent {
+            SettingsTheme {
+                DolbyComposeScreen(
+                    context = this,
+                    controller = dolbyController,
+                    equalizerViewModel = equalizerViewModel,
+                    onResetAll = {
+                        dolbyController.resetAllProfiles()
+                        Toast.makeText(
+                            this,
+                            getString(R.string.dolby_reset_all_toast),
+                            Toast.LENGTH_SHORT,
+                        ).show()
+                    },
+                )
             }
-            else -> super.onOptionsItemSelected(item)
         }
-
-    private fun confirmReset() {
-        AlertDialog.Builder(this)
-            .setTitle(R.string.dolby_reset_all)
-            .setMessage(R.string.dolby_reset_all_message)
-            .setPositiveButton(android.R.string.yes) { _, _ ->
-                dolbyController.resetAllProfiles()
-                recreate()
-                Toast.makeText(this, getString(R.string.dolby_reset_all_toast), Toast.LENGTH_SHORT)
-                    .show()
-            }
-            .setNegativeButton(android.R.string.no, null)
-            .show()
-    }
-
-    companion object {
-        private const val TAG = "DolbySettingsActivity"
-        private const val MENU_RESET = 1001
     }
 }

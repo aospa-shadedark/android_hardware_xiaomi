@@ -18,6 +18,8 @@ import androidx.preference.PreferenceManager
 import co.aospa.dolby.xiaomi.DolbyConstants.Companion.dlog
 import co.aospa.dolby.xiaomi.DolbyConstants.DsParam
 import co.aospa.dolby.xiaomi.R
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
 
 internal class DolbyController private constructor(
     private val context: Context
@@ -29,6 +31,11 @@ internal class DolbyController private constructor(
         context.getResources().getBoolean(R.bool.dolby_stereo_widening_supported)
     private val volumeLevelerSupported =
         context.getResources().getBoolean(R.bool.dolby_volume_leveler_supported)
+
+    private val _enabled = MutableStateFlow(false)
+    val enabled = _enabled.asStateFlow()
+    private val _activeProfile = MutableStateFlow(0)
+    val activeProfile = _activeProfile.asStateFlow()
 
     // Restore current profile on every media session
     private val playbackCallback = object : AudioPlaybackCallback() {
@@ -78,6 +85,7 @@ internal class DolbyController private constructor(
             dlog(TAG, "setDsOn: $value")
             checkEffect()
             dolbyEffect.dsOn = value
+            _enabled.value = value
             registerCallbacks = value
             if (value)
                 setCurrentProfile()
@@ -92,6 +100,7 @@ internal class DolbyController private constructor(
             dlog(TAG, "setProfile: $value")
             checkEffect()
             dolbyEffect.profile = value
+            _activeProfile.value = value
         }
 
     init {

@@ -8,7 +8,14 @@
     <!-- Dolby Atmos -->
     <string name="dolby_title">Dolby Atmos</string>
     <string name="dolby_enable">Use Dolby Atmos</string>
+    <string name="dolby_disabled_summary">Turn on Dolby Atmos to adjust settings.</string>
+    <string name="dolby_bass_summary">Boost low frequencies for the selected profile.</string>
+    <string name="dolby_dynamic_controls_summary">Dynamic follows Dolby’s automatic tuning. Select another profile to adjust advanced controls.</string>
+    <string name="dolby_advanced_disabled">Turn on Dolby Atmos to adjust advanced settings.</string>
+    <string name="dolby_profile_context">%1$s profile</string>
     <string name="dolby_profile_title">Choose a profile</string>
+    <string name="dolby_profile_label">Profile</string>
+    <string name="dolby_profile_change">Change</string>
     <string name="dolby_preset">Graphic equalizer</string>
     <string name="dolby_off">Off</string>
     <string name="dolby_on">On</string>
@@ -28,15 +35,36 @@
     <string name="dolby_volume_leveler">Volume leveler</string>
     <string name="dolby_connect_headphones">Connect headphones</string>
     <string name="dolby_reset_all">Reset profiles</string>
+    <string name="dolby_reset_action">Reset</string>
     <string name="dolby_reset_all_message">This will reset all profiles to factory defaults.</string>
-    <string name="dolby_reset_all_toast">Succesfully reset all profiles</string>
+    <string name="dolby_reset_all_toast">Successfully reset all profiles</string>
     <string name="dolby_strength">Strength</string>
+    <string name="dolby_stereo_widening">Stereo widening strength</string>
+    <string name="dolby_nav_home">Home</string>
+    <string name="dolby_nav_equalizer">Equalizer</string>
+    <string name="dolby_nav_advanced">Advanced</string>
+    <string name="dolby_dialogue_strength">Dialogue strength</string>
+    <string name="dolby_eq_disabled_summary">Turn on Dolby Atmos to adjust the equalizer.</string>
+    <string name="dolby_dynamic_eq_summary">Dynamic uses Dolby’s automatic tuning. Select another profile to adjust the equalizer.</string>
+    <string name="dolby_eq_min_gain">−10 dB</string>
+    <string name="dolby_eq_neutral_gain">0 dB</string>
+    <string name="dolby_eq_max_gain">+10 dB</string>
+    <string name="dolby_eq_curve_description">Select a frequency band, then adjust its level.</string>
+    <string name="dolby_eq_band_gain">Gain for %1$s</string>
+    <string name="dolby_geq_save_new_preset">Save as new preset</string>
+    <string name="dolby_geq_manage_presets">Manage presets</string>
+    <string name="dolby_geq_preset_help">Choose a preset to apply it. Save your EQ to keep a custom version.</string>
+    <string name="dolby_geq_custom_preset_hint">Edits are saved automatically</string>
+    <string name="dolby_geq_built_in_presets">Dolby presets</string>
+    <string name="dolby_geq_your_presets">Your presets</string>
+    <string name="dolby_geq_active_preset">Active preset</string>
 
     <!-- Dolby profiles -->
     <string name="dolby_profile_dynamic">Dynamic</string>
     <string name="dolby_profile_video">Movie/Video</string>
     <string name="dolby_profile_music">Music</string>
     <string name="dolby_profile_voice">Voice</string>
+    <string name="dolby_profile_spatialaudio">Spatial audio</string>
     <string name="dolby_profile_custom">Custom</string>
 
     <!-- Dolby equalizer presets -->
@@ -64,10 +92,12 @@
     <string name="dolby_geq_reset_gains">Reset gains</string>
     <string name="dolby_geq_reset_gains_prompt">Do you want to reset this preset to defaults?</string>
     <string name="dolby_geq_preset_name_exists">Preset name already exists!</string>
+    <string name="dolby_geq_preset_name_empty">Enter a preset name.</string>
     <string name="dolby_geq_preset_name_too_long">Preset name is too long!</string>
 
     <!-- Dolby intelligent EQ -->
     <string name="dolby_ieq">Intelligent equalizer</string>
+    <string name="dolby_ieq_summary">Choose how Dolby balances detail and warmth for this profile.</string>
     <string name="dolby_balanced">Balanced</string>
     <string name="dolby_warm">Warm</string>
     <string name="dolby_detailed">Detailed</string>
