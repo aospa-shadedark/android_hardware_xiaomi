@@ -27,13 +27,14 @@ class EqualizerRepository(
 
     // Preset is saved as a string of comma separated gains in SharedPreferences
     // and is unique to each profile ID
-    private val profile = dolbyController.profile
-    private val profileSharedPrefs by lazy {
+    val activeProfile: Int get() = dolbyController.profile
+    val activeProfileFlow get() = dolbyController.activeProfile
+
+    private fun profileSharedPrefs(profile: Int = dolbyController.profile) =
         context.getSharedPreferences(
             "profile_$profile",
             Context.MODE_PRIVATE
         )
-    }
 
     private val presetsSharedPrefs by lazy {
         context.getSharedPreferences(
@@ -87,8 +88,8 @@ class EqualizerRepository(
         }
     }
 
-    suspend fun getBandGains(): List<BandGain> = withContext(Dispatchers.IO) {
-        val gains = profileSharedPrefs.getString(PREF_PRESET, dolbyController.getPreset())
+    suspend fun getBandGains(profile: Int = dolbyController.profile): List<BandGain> = withContext(Dispatchers.IO) {
+        val gains = profileSharedPrefs(profile).getString(PREF_PRESET, dolbyController.getPreset(profile))
         return@withContext if (gains.isNullOrEmpty()) {
             defaultPreset.bandGains
         } else {
@@ -98,11 +99,11 @@ class EqualizerRepository(
         }
     }
 
-    suspend fun setBandGains(bandGains: List<BandGain>) = withContext(Dispatchers.IO) {
+    suspend fun setBandGains(bandGains: List<BandGain>, profile: Int = dolbyController.profile) = withContext(Dispatchers.IO) {
         dlog(TAG, "setBandGains($bandGains)")
         val gains = serializeGains(bandGains)
-        dolbyController.setPreset(gains)
-        profileSharedPrefs.edit()
+        dolbyController.setPreset(gains, profile)
+        profileSharedPrefs(profile).edit()
             .putString(PREF_PRESET, gains)
             .apply()
     }

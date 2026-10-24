@@ -19,6 +19,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.yield
 import kotlinx.coroutines.launch
 
 const val TAG = "EqViewModel"
@@ -34,6 +35,8 @@ class EqualizerViewModel(
     val preset = _preset.asStateFlow()
 
     private var presetRestored = false
+    private var currentProfile = repository.activeProfile
+    val activeProfile = repository.activeProfileFlow
 
     init {
         // Update the list of presets: combined list of user defined presets if any,
@@ -55,7 +58,16 @@ class EqualizerViewModel(
                     } ?: Preset(bandGains = bandGains)
                     dlog(TAG, "restored preset: ${_preset.value}")
                     presetRestored = true
+                    if (repository.activeProfile != currentProfile) {
+                        refreshProfile(repository.activeProfile)
+                    }
                 }
+            }
+            .launchIn(viewModelScope)
+
+        repository.activeProfileFlow
+            .onEach { profile ->
+                if (presetRestored && profile != currentProfile) refreshProfile(profile)
             }
             .launchIn(viewModelScope)
 
@@ -68,7 +80,7 @@ class EqualizerViewModel(
                     return@onEach
                 }
                 dlog(TAG, "updated preset: $it")
-                repository.setBandGains(it.bandGains)
+                repository.setBandGains(it.bandGains, currentProfile)
                 if (it.isUserDefined) {
                     repository.addPreset(it)
                 }
@@ -87,6 +99,20 @@ class EqualizerViewModel(
             // Switch to flat preset
             _preset.value = repository.defaultPreset
         }
+    }
+
+    fun refresh() {
+        viewModelScope.launch {
+            while (!presetRestored) yield()
+            refreshProfile(repository.activeProfile)
+        }
+    }
+
+    private suspend fun refreshProfile(profile: Int) {
+        currentProfile = profile
+        val gains = repository.getBandGains(profile)
+        _preset.value = _presets.value.find { gains == it.bandGains }
+            ?: Preset(bandGains = gains)
     }
 
     fun setPreset(preset: Preset) {
@@ -111,14 +137,17 @@ class EqualizerViewModel(
     }
 
     // Returns string containing the error message if it failed, otherwise null
-    private fun validatePresetName(name: String): PresetNameValidationError? {
-        // Ensure we don't have another preset with the same name
-        return if (
-            _presets.value
-            .any { it.name!!.equals(name.trim(), ignoreCase = true) }
+    private fun validatePresetName(name: String, excluding: Preset? = null): PresetNameValidationError? {
+        val normalizedName = name.trim()
+        return if (normalizedName.isEmpty()) {
+            PresetNameValidationError.NAME_EMPTY
+        } else if (
+            _presets.value.any {
+                it != excluding && it.name?.equals(normalizedName, ignoreCase = true) == true
+            }
         ) {
             PresetNameValidationError.NAME_EXISTS
-        } else if (name.length > 50) {
+        } else if (normalizedName.length > 50) {
             PresetNameValidationError.NAME_TOO_LONG
         } else null
     }
@@ -140,10 +169,15 @@ class EqualizerViewModel(
     fun renamePreset(preset: Preset, name: String): PresetNameValidationError? {
         dlog(TAG, "renamePreset($preset, $name)")
         // create a preset with the new name and same gains
-        createNewPreset(name = name)?.let {
+        validatePresetName(name, excluding = preset)?.let {
             dlog(TAG, "renamePreset failed")
             return it
         }
+        _preset.value = _preset.value.copy(
+            name = name.trim(),
+            isUserDefined = true,
+            isMutated = false
+        )
         // and delete the old one.
         deletePreset(preset, shouldReset = false)
         return null
