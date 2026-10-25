@@ -29,6 +29,8 @@ class EqualizerRepository(
     // and is unique to each profile ID
     val activeProfile: Int get() = dolbyController.profile
     val activeProfileFlow get() = dolbyController.activeProfile
+    val settingsRevisionFlow get() = dolbyController.settingsRevision
+    val settingsRevision: Long get() = settingsRevisionFlow.value
 
     private fun profileSharedPrefs(profile: Int = dolbyController.profile) =
         context.getSharedPreferences(
@@ -89,23 +91,34 @@ class EqualizerRepository(
     }
 
     suspend fun getBandGains(profile: Int = dolbyController.profile): List<BandGain> = withContext(Dispatchers.IO) {
-        val gains = profileSharedPrefs(profile).getString(PREF_PRESET, dolbyController.getPreset(profile))
-        return@withContext if (gains.isNullOrEmpty()) {
-            defaultPreset.bandGains
-        } else {
-            deserializeGains(gains)
-        }.also {
-            dlog(TAG, "getBandGains: $it")
+        synchronized(dolbyController.settingsLock) {
+            val gains = profileSharedPrefs(profile).getString(PREF_PRESET, dolbyController.getPreset(profile))
+            if (gains.isNullOrEmpty()) {
+                defaultPreset.bandGains
+            } else {
+                deserializeGains(gains)
+            }.also {
+                dlog(TAG, "getBandGains: $it")
+            }
         }
     }
 
-    suspend fun setBandGains(bandGains: List<BandGain>, profile: Int = dolbyController.profile) = withContext(Dispatchers.IO) {
-        dlog(TAG, "setBandGains($bandGains)")
-        val gains = serializeGains(bandGains)
-        dolbyController.setPreset(gains, profile)
-        profileSharedPrefs(profile).edit()
-            .putString(PREF_PRESET, gains)
-            .apply()
+    suspend fun setBandGains(
+        bandGains: List<BandGain>,
+        profile: Int,
+        expectedRevision: Long,
+    ): Boolean = withContext(Dispatchers.IO) {
+        synchronized(dolbyController.settingsLock) {
+            // A reset invalidates edits queued before it. Do not restore an old curve.
+            if (settingsRevision != expectedRevision) return@synchronized false
+            dlog(TAG, "setBandGains($bandGains)")
+            val gains = serializeGains(bandGains)
+            dolbyController.setPreset(gains, profile)
+            profileSharedPrefs(profile).edit()
+                .putString(PREF_PRESET, gains)
+                .apply()
+            true
+        }
     }
 
     suspend fun addPreset(preset: Preset) = withContext(Dispatchers.IO) {
@@ -119,6 +132,14 @@ class EqualizerRepository(
         dlog(TAG, "removePreset($preset)")
         presetsSharedPrefs.edit()
             .remove(preset.name)
+            .apply()
+    }
+
+    suspend fun renamePreset(previous: Preset, replacement: Preset) = withContext(Dispatchers.IO) {
+        require(previous.isUserDefined && replacement.isUserDefined)
+        presetsSharedPrefs.edit()
+            .remove(previous.name)
+            .putString(replacement.name, serializeGains(replacement.bandGains))
             .apply()
     }
 

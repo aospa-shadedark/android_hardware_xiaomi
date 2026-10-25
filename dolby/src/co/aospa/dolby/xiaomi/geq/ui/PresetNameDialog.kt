@@ -14,6 +14,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -31,14 +32,13 @@ fun PresetNameDialog(
     onDismissDialog: () -> Unit
 ) {
     var showDialog by remember { mutableStateOf(true) }
-    if (!showDialog) {
-        onDismissDialog()
-        return
+    LaunchedEffect(showDialog) {
+        if (!showDialog) onDismissDialog()
     }
     var text by remember { mutableStateOf(presetName) }
     var error by remember { mutableStateOf<PresetNameValidationError?>(null) }
 
-    AlertDialog(
+    if (showDialog) AlertDialog(
         onDismissRequest = { showDialog = false },
         confirmButton = {
             TextButton(

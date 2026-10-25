@@ -7,10 +7,15 @@
 
     <!-- Dolby Atmos -->
     <string name="dolby_title">Dolby Atmos</string>
-    <string name="dolby_enable">Use Dolby Atmos</string>
+    <string name="dolby_enable">Dolby Atmos</string>
+    <string name="dolby_enabled_summary">Audio enhancement is on</string>
+    <string name="dolby_powered_off_summary">Audio enhancement is off</string>
     <string name="dolby_disabled_summary">Turn on Dolby Atmos to adjust settings.</string>
     <string name="dolby_bass_summary">Boost low frequencies for the selected profile.</string>
-    <string name="dolby_dynamic_controls_summary">Dynamic uses Dolby’s automatic tuning. Keeping its Advanced settings at the Dolby defaults is recommended.</string>
+    <string name="dolby_dynamic_controls_summary">Dynamic adjusts sound automatically. You can change these settings, but Dolby’s defaults are recommended for this profile.</string>
+    <string name="dolby_dynamic_controls_dismiss">Got it</string>
+    <string name="dolby_advanced_shared_summary">Advanced changes apply across all Dolby profiles.</string>
+    <string name="dolby_advanced_reset_note">To restore Dolby defaults, use Reset profiles on Home.</string>
     <string name="dolby_advanced_disabled">Turn on Dolby Atmos to adjust advanced settings.</string>
     <string name="dolby_profile_context">%1$s profile</string>
     <string name="dolby_profile_title">Choose a profile</string>
@@ -48,7 +53,7 @@
     <string name="dolby_connect_headphones">Connect headphones</string>
     <string name="dolby_reset_all">Reset profiles</string>
     <string name="dolby_reset_action">Reset</string>
-    <string name="dolby_reset_all_message">This will reset all profiles to factory defaults.</string>
+    <string name="dolby_reset_all_message">This restores every profile’s Dolby tuning and current equalizer settings to device defaults. Saved custom presets and app assignments are kept.</string>
     <string name="dolby_reset_all_toast">Successfully reset all profiles</string>
     <string name="dolby_strength">Strength</string>
     <string name="dolby_stereo_widening">Stereo widening strength</string>
@@ -60,9 +65,11 @@
     <string name="dolby_eq_min_gain">−10 dB</string>
     <string name="dolby_eq_neutral_gain">0 dB</string>
     <string name="dolby_eq_max_gain">+10 dB</string>
-    <string name="dolby_eq_curve_description">Select a frequency band, then adjust its level.</string>
+    <string name="dolby_eq_curve_description">Select a band, then adjust its level.</string>
     <string name="dolby_eq_band_guide">Only 10 bands are editable here. Imported 15- or 20-band presets are adapted to these controls; Dolby fills the remaining points in its 20-band curve.</string>
     <string name="dolby_eq_band_gain">Gain for %1$s</string>
+    <string name="dolby_eq_selected_band">Selected band: %1$s</string>
+    <string name="dolby_eq_select_band">Select %1$s band</string>
     <string name="dolby_geq_save_new_preset">Save as new preset</string>
     <string name="dolby_geq_manage_presets">Manage presets</string>
     <string name="dolby_geq_preset_help">Only 10 bands are editable here. Imported 15- or 20-band presets are adapted to these controls; Dolby fills the remaining points in its 20-band curve. Exports contain the 10-band curve.</string>
@@ -116,7 +123,7 @@
 
     <!-- Dolby intelligent EQ -->
     <string name="dolby_ieq">Intelligent equalizer</string>
-    <string name="dolby_ieq_summary">Choose how Dolby balances detail and warmth for this profile.</string>
+    <string name="dolby_ieq_summary">Choose how Dolby balances detail and warmth.</string>
     <string name="dolby_balanced">Balanced</string>
     <string name="dolby_warm">Warm</string>
     <string name="dolby_detailed">Detailed</string>

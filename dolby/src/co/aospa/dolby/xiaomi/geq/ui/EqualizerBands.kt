@@ -7,6 +7,7 @@
 package co.aospa.dolby.xiaomi.geq.ui
 
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -14,10 +15,10 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -37,11 +38,16 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.CustomAccessibilityAction
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import co.aospa.dolby.xiaomi.R
+import co.aospa.dolby.xiaomi.DolbySlider
 import kotlin.math.roundToInt
 
 @Composable
@@ -61,6 +67,14 @@ fun EqualizerBands(viewModel: EqualizerViewModel) {
     val surface = MaterialTheme.colorScheme.surfaceContainerHighest
     val responseDescription = stringResource(R.string.dolby_eq_curve_description)
     val gainDescription = stringResource(R.string.dolby_eq_band_gain, formatFrequency(selectedBand.band))
+    val selectedBandDescription = stringResource(R.string.dolby_eq_selected_band, formatFrequency(selectedBand.band))
+    val bandActions = bandGains.mapIndexed { index, band ->
+        CustomAccessibilityAction(stringResource(R.string.dolby_eq_select_band, formatFrequency(band.band))) {
+            selected = index
+            sliderPosition = band.gain / 100f
+            true
+        }
+    }
 
     val responseGains = remember(bandGains, selected, sliderPosition) {
         bandGains.mapIndexed { index, band ->
@@ -87,7 +101,7 @@ fun EqualizerBands(viewModel: EqualizerViewModel) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
                         stringResource(R.string.dolby_preset),
-                        style = MaterialTheme.typography.titleMedium,
+                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
                     )
                     Text(
                         responseDescription,
@@ -120,7 +134,11 @@ fun EqualizerBands(viewModel: EqualizerViewModel) {
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(166.dp)
-                    .semantics { contentDescription = responseDescription }
+                    .semantics {
+                        contentDescription = responseDescription
+                        stateDescription = selectedBandDescription
+                        customActions = bandActions
+                    }
                     .pointerInput(bandGains) {
                         detectTapGestures { tap ->
                             val edge = 12.dp.toPx()
@@ -203,34 +221,62 @@ fun EqualizerBands(viewModel: EqualizerViewModel) {
                 }
             }
 
-            Row(modifier = Modifier.fillMaxWidth()) {
-                bandGains.forEachIndexed { index, band ->
-                    val label = if (index % 2 == 0 || index == bandGains.lastIndex) {
-                        formatFrequency(band.band)
-                    } else ""
-                    Text(
-                        text = label,
-                        modifier = Modifier.weight(1f),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        textAlign = when (index) {
-                            0 -> TextAlign.Start
-                            bandGains.lastIndex -> TextAlign.End
-                            else -> TextAlign.Center
-                        },
-                        maxLines = 1,
-                    )
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                bandGains.chunked(5).forEachIndexed { rowIndex, rowBands ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        rowBands.forEachIndexed { columnIndex, band ->
+                            val index = rowIndex * 5 + columnIndex
+                            val isSelected = index == selected
+                            Surface(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(34.dp)
+                                    .selectable(selected = isSelected, role = Role.RadioButton) {
+                                        if (index != selected) hapticView.performDolbySelectionHaptic()
+                                        selected = index
+                                        sliderPosition = band.gain / 100f
+                                    },
+                                shape = MaterialTheme.shapes.small,
+                                color = if (isSelected) {
+                                    MaterialTheme.colorScheme.primaryContainer
+                                } else {
+                                    MaterialTheme.colorScheme.surfaceContainerHighest
+                                },
+                                contentColor = if (isSelected) {
+                                    MaterialTheme.colorScheme.onPrimaryContainer
+                                } else {
+                                    MaterialTheme.colorScheme.onSurfaceVariant
+                                },
+                                border = if (isSelected) null else BorderStroke(
+                                    1.dp,
+                                    outline.copy(alpha = .55f),
+                                ),
+                            ) {
+                                Text(
+                                    text = formatFrequency(band.band),
+                                    modifier = Modifier.fillMaxWidth().padding(horizontal = 2.dp, vertical = 8.dp),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Medium,
+                                    textAlign = TextAlign.Center,
+                                    maxLines = 1,
+                                )
+                            }
+                        }
+                    }
                 }
             }
 
-            Slider(
+            DolbySlider(
                 value = sliderPosition,
                 onValueChange = { sliderPosition = it },
                 onValueChangeFinished = {
                     viewModel.setGain(selected, (sliderPosition * 100f).toInt())
                 },
                 valueRange = -1f..1f,
-                modifier = Modifier.semantics {
+                modifier = Modifier.fillMaxWidth().semantics {
                     contentDescription = gainDescription
                 },
             )
@@ -247,7 +293,7 @@ fun EqualizerBands(viewModel: EqualizerViewModel) {
 }
 
 private fun formatFrequency(frequency: Int) =
-    if (frequency >= 1000) "${frequency / 1000}k" else "${frequency}Hz"
+    if (frequency >= 1000) "${frequency / 1000} kHz" else "${frequency} Hz"
 
 private fun formatGain(gain: Float): String {
     val db = gain * 10f
