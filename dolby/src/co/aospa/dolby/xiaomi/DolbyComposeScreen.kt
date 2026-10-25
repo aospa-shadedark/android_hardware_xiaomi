@@ -6,7 +6,13 @@
 
 package co.aospa.dolby.xiaomi
 
+import android.content.Intent
+import android.content.ActivityNotFoundException
 import android.content.Context
+import android.media.AudioManager
+import android.media.Spatializer
+import android.os.Build
+import android.provider.Settings
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.selection.selectable
@@ -76,6 +82,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringArrayResource
@@ -100,6 +107,7 @@ import co.aospa.dolby.xiaomi.DolbyConstants.Companion.PREF_BASS
 import co.aospa.dolby.xiaomi.DolbyConstants.Companion.PREF_DIALOGUE
 import co.aospa.dolby.xiaomi.DolbyConstants.Companion.PREF_DIALOGUE_AMOUNT
 import co.aospa.dolby.xiaomi.DolbyConstants.Companion.PREF_DYNAMIC_ADVANCED_GUIDE_SHOWN
+import co.aospa.dolby.xiaomi.DolbyConstants.Companion.PREF_EQ_GUIDE_SHOWN
 import co.aospa.dolby.xiaomi.DolbyConstants.Companion.PREF_HP_VIRTUALIZER
 import co.aospa.dolby.xiaomi.DolbyConstants.Companion.PREF_IEQ
 import co.aospa.dolby.xiaomi.DolbyConstants.Companion.PREF_PROFILE
@@ -129,6 +137,12 @@ internal fun DolbyComposeScreen(
     val hapticView = LocalView.current
     var showReset by remember { mutableStateOf(false) }
     var showAppProfiles by remember { mutableStateOf(false) }
+    var showEqualizerGuide by remember(context) {
+        mutableStateOf(
+            !PreferenceManager.getDefaultSharedPreferences(context)
+                .getBoolean(PREF_EQ_GUIDE_SHOWN, false),
+        )
+    }
     val enabled by controller.enabled.collectAsState()
     val profile by controller.activeProfile.collectAsState()
     val settingsRevision by controller.settingsRevision.collectAsState()
@@ -209,8 +223,8 @@ internal fun DolbyComposeScreen(
                             }
                         }
                     }
-                    if (destination == DolbyDestination.EQUALIZER) {
-                        IconButton(onClick = { equalizerGuideDismissed = false }) {
+                    if (destination == DolbyDestination.EQUALIZER && enabled) {
+                        IconButton(onClick = { showEqualizerGuide = true }) {
                             Icon(
                                 imageVector = Icons.Default.Info,
                                 contentDescription = stringResource(R.string.dolby_help),
@@ -218,7 +232,7 @@ internal fun DolbyComposeScreen(
                             )
                         }
                     }
-                    if (destination == DolbyDestination.ADVANCED && profile == 0) {
+                    if (destination == DolbyDestination.ADVANCED && profile == 0 && enabled) {
                         IconButton(onClick = { dynamicAdvancedGuideDismissed = false }) {
                             Icon(
                                 imageVector = Icons.Default.Info,
@@ -266,6 +280,13 @@ internal fun DolbyComposeScreen(
                         DolbyDestination.EQUALIZER -> EqualizerScreen(
                             viewModel = equalizerViewModel,
                             enabled = enabled,
+                            showFirstRunGuide = showEqualizerGuide,
+                            onDismissFirstRunGuide = {
+                                PreferenceManager.getDefaultSharedPreferences(context).edit()
+                                    .putBoolean(PREF_EQ_GUIDE_SHOWN, true)
+                                    .apply()
+                                showEqualizerGuide = false
+                            },
                             modifier = Modifier.fillMaxSize(),
                         )
                         DolbyDestination.ADVANCED -> AdvancedPage(
@@ -628,6 +649,78 @@ private fun HomePage(
 }
 
 @Composable
+private fun SpatialAudioCard() {
+    val context = LocalContext.current
+    val hapticView = LocalView.current
+    val supported = remember(context) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S_V2) {
+            false
+        } else {
+            val audioManager = context.getSystemService(AudioManager::class.java)
+            val spatializer = audioManager?.spatializer
+            runCatching {
+                spatializer != null && spatializer.immersiveAudioLevel !=
+                    Spatializer.SPATIALIZER_IMMERSIVE_LEVEL_NONE
+            }.getOrDefault(false)
+        }
+    }
+
+    if (supported) {
+        Card(
+            modifier = Modifier.fillMaxWidth().clickable {
+                hapticView.performDolbySelectionHaptic()
+                try {
+                    context.startActivity(Intent(Settings.ACTION_SOUND_SETTINGS))
+                } catch (_: ActivityNotFoundException) {
+                    context.startActivity(Intent(Settings.ACTION_SETTINGS))
+                }
+            },
+            shape = MaterialTheme.shapes.extraLarge,
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+            ),
+        ) {
+            Row(
+                Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 14.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(14.dp),
+            ) {
+                Surface(
+                    modifier = Modifier.height(42.dp).width(42.dp),
+                    shape = RoundedCornerShape(14.dp),
+                    color = MaterialTheme.colorScheme.tertiaryContainer,
+                    contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_dolby_spatial_audio),
+                            contentDescription = null,
+                            modifier = Modifier.padding(8.dp).fillMaxSize(),
+                        )
+                    }
+                }
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Text(
+                        stringResource(R.string.dolby_spatial_audio_title),
+                        style = MaterialTheme.typography.titleMedium,
+                    )
+                    Text(
+                        stringResource(R.string.dolby_spatial_audio_summary),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Text(
+                    "›",
+                    style = MaterialTheme.typography.headlineSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+    }
+}
+
+@Composable
 @OptIn(ExperimentalMaterial3Api::class)
 private fun ProfilePicker(profile: Int, onSelected: (Int) -> Unit) {
     val hapticView = LocalView.current
@@ -638,7 +731,6 @@ private fun ProfilePicker(profile: Int, onSelected: (Int) -> Unit) {
         R.drawable.ic_dolby_profile_video,
         R.drawable.ic_dolby_profile_music,
         R.drawable.ic_dolby_profile_voice,
-        R.drawable.ic_dolby_profile_spatial,
         R.drawable.ic_dolby_profile_custom,
     )
     val index = values.indexOf(profile.toString()).takeIf { it >= 0 } ?: 0
@@ -685,7 +777,12 @@ private fun ProfilePicker(profile: Int, onSelected: (Int) -> Unit) {
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 Text(stringResource(R.string.dolby_profile_title), style = MaterialTheme.typography.titleLarge)
-                Spacer(Modifier.height(4.dp))
+                Text(
+                    stringResource(R.string.dolby_profile_picker_summary),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(Modifier.height(2.dp))
                 entries.forEachIndexed { i, label ->
                     val profileValue = values.getOrNull(i)?.toIntOrNull() ?: return@forEachIndexed
                     val selected = profileValue == profile
@@ -694,7 +791,6 @@ private fun ProfilePicker(profile: Int, onSelected: (Int) -> Unit) {
                         1 -> R.string.dolby_profile_video_summary
                         2 -> R.string.dolby_profile_music_summary
                         8 -> R.string.dolby_profile_voice_summary
-                        4 -> R.string.dolby_profile_spatial_summary
                         else -> R.string.dolby_profile_custom_summary
                     }
                     Surface(
@@ -704,9 +800,9 @@ private fun ProfilePicker(profile: Int, onSelected: (Int) -> Unit) {
                             onSelected(profileValue)
                         },
                         shape = MaterialTheme.shapes.large,
-                        color = if (selected) MaterialTheme.colorScheme.secondaryContainer
+                        color = if (selected) MaterialTheme.colorScheme.primaryContainer
                             else MaterialTheme.colorScheme.surfaceContainerLow,
-                        contentColor = if (selected) MaterialTheme.colorScheme.onSecondaryContainer
+                        contentColor = if (selected) MaterialTheme.colorScheme.onPrimaryContainer
                             else MaterialTheme.colorScheme.onSurface,
                         border = BorderStroke(
                             1.dp,
@@ -715,29 +811,50 @@ private fun ProfilePicker(profile: Int, onSelected: (Int) -> Unit) {
                         ),
                     ) {
                         Row(
-                            Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp),
+                            Modifier.fillMaxWidth().heightIn(min = 82.dp)
+                                .padding(horizontal = 16.dp, vertical = 14.dp),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(14.dp),
                         ) {
                             Surface(
                                 shape = MaterialTheme.shapes.medium,
-                                color = if (selected) MaterialTheme.colorScheme.surface.copy(alpha = 0.65f)
+                                color = if (selected) MaterialTheme.colorScheme.surface.copy(alpha = 0.72f)
                                     else MaterialTheme.colorScheme.surfaceContainerHigh,
-                                contentColor = if (selected) MaterialTheme.colorScheme.onSecondaryContainer
+                                contentColor = if (selected) MaterialTheme.colorScheme.onPrimaryContainer
                                     else MaterialTheme.colorScheme.primary,
                             ) {
                                 Icon(
                                     painterResource(ids[i]),
                                     contentDescription = null,
-                                    modifier = Modifier.padding(10.dp).height(24.dp).width(24.dp),
+                                    modifier = Modifier.padding(12.dp).height(24.dp).width(24.dp),
                                 )
                             }
-                            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                                Text(label, style = MaterialTheme.typography.titleMedium)
+                            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                ) {
+                                    Text(label, style = MaterialTheme.typography.titleMedium)
+                                    if (profileValue == 0) {
+                                        Surface(
+                                            shape = MaterialTheme.shapes.small,
+                                            color = if (selected) MaterialTheme.colorScheme.surface.copy(alpha = 0.72f)
+                                                else MaterialTheme.colorScheme.secondaryContainer,
+                                        ) {
+                                            Text(
+                                                stringResource(R.string.dolby_profile_recommended),
+                                                modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp),
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = if (selected) MaterialTheme.colorScheme.onPrimaryContainer
+                                                    else MaterialTheme.colorScheme.onSecondaryContainer,
+                                            )
+                                        }
+                                    }
+                                }
                                 Text(
                                     stringResource(description),
                                     style = MaterialTheme.typography.bodySmall,
-                                    color = if (selected) MaterialTheme.colorScheme.onSecondaryContainer
+                                    color = if (selected) MaterialTheme.colorScheme.onPrimaryContainer
                                         else MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
                             }
@@ -853,6 +970,7 @@ private fun AdvancedPage(
                 }
             }
         }
+        SpatialAudioCard()
         Column(
             Modifier.fillMaxWidth().padding(horizontal = 4.dp),
             verticalArrangement = Arrangement.spacedBy(4.dp),
