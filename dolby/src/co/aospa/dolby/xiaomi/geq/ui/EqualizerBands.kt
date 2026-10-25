@@ -91,6 +91,10 @@ fun EqualizerBands(viewModel: EqualizerViewModel) {
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
         ),
+        border = BorderStroke(
+            1.dp,
+            MaterialTheme.colorScheme.outlineVariant.copy(alpha = .68f),
+        ),
     ) {
         Column(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 16.dp),
@@ -214,14 +218,17 @@ fun EqualizerBands(viewModel: EqualizerViewModel) {
                 points.forEachIndexed { index, point ->
                     if (index == selected) {
                         drawCircle(primary.copy(alpha = .18f), 13.dp.toPx(), point)
+                        drawCircle(primary, 6.dp.toPx(), point)
+                        drawCircle(surface, 3.8.dp.toPx(), point)
+                    } else {
+                        drawCircle(surface, 3.5.dp.toPx(), point)
+                        drawCircle(
+                            primary,
+                            3.5.dp.toPx(),
+                            point,
+                            style = Stroke(width = 2.dp.toPx()),
+                        )
                     }
-                    drawCircle(surface, if (index == selected) 6.dp.toPx() else 3.5.dp.toPx(), point)
-                    drawCircle(
-                        primary,
-                        if (index == selected) 6.dp.toPx() else 3.5.dp.toPx(),
-                        point,
-                        style = Stroke(width = 2.dp.toPx()),
-                    )
                 }
             }
 

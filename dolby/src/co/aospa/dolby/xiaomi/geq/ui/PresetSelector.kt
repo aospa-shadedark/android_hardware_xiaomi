@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -164,7 +165,23 @@ fun PresetSelector(viewModel: EqualizerViewModel) {
                 )
             }
             FilledTonalButton(
-                modifier = Modifier.height(56.dp).width(56.dp).align(Alignment.Bottom),
+                modifier = Modifier.height(56.dp).width(48.dp).align(Alignment.Bottom),
+                onClick = {
+                    hapticView.performDolbySelectionHaptic()
+                    viewModel.reset()
+                },
+                shape = MaterialTheme.shapes.large,
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                contentPadding = PaddingValues(0.dp),
+            ) {
+                Icon(
+                    Icons.Default.Refresh,
+                    modifier = Modifier.size(20.dp),
+                    contentDescription = stringResource(R.string.dolby_reset_action),
+                )
+            }
+            FilledTonalButton(
+                modifier = Modifier.height(56.dp).width(48.dp).align(Alignment.Bottom),
                 onClick = {
                     hapticView.performDolbySelectionHaptic()
                     expanded = false
@@ -177,21 +194,6 @@ fun PresetSelector(viewModel: EqualizerViewModel) {
                 Icon(
                     Icons.Default.Add,
                     contentDescription = stringResource(R.string.dolby_geq_add_preset_description),
-                )
-            }
-            FilledTonalButton(
-                modifier = Modifier.height(56.dp).width(56.dp).align(Alignment.Bottom),
-                onClick = {
-                    hapticView.performDolbySelectionHaptic()
-                    viewModel.reset()
-                },
-                shape = MaterialTheme.shapes.large,
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-                contentPadding = PaddingValues(0.dp),
-            ) {
-                Icon(
-                    Icons.Default.Refresh,
-                    contentDescription = stringResource(R.string.dolby_reset_action),
                 )
             }
         }
