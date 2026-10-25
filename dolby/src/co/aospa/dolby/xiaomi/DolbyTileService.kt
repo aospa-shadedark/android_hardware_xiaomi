@@ -27,6 +27,12 @@ class DolbyTileService : TileService() {
     override fun onClick() {
         val isDsOn = dolbyController.dsOn
         dolbyController.setDsOnAndPersist(!isDsOn) // toggle
+        val appProfiles = AppProfileManager(applicationContext)
+        if (isDsOn) {
+            DolbyAppProfileService.stop(applicationContext)
+        } else if (appProfiles.isEnabled && appProfiles.hasUsageAccess()) {
+            DolbyAppProfileService.start(applicationContext)
+        }
         qsTile.apply {
             state = if (isDsOn) Tile.STATE_INACTIVE else Tile.STATE_ACTIVE
             updateTile()

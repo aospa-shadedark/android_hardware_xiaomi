@@ -1,25 +1,30 @@
 /*
- * Copyright (C) 2024 Paranoid Android
+ * Copyright (C) 2024-26 Paranoid Android
  *
  * SPDX-License-Identifier: Apache-2.0
  */
 
 package co.aospa.dolby.xiaomi.geq.ui
 
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
+import co.aospa.dolby.xiaomi.DolbyConstants.Companion.dlog
+import co.aospa.dolby.xiaomi.geq.data.BandGain
 import co.aospa.dolby.xiaomi.geq.data.EqualizerRepository
 import co.aospa.dolby.xiaomi.geq.data.Preset
-import co.aospa.dolby.xiaomi.DolbyConstants.Companion.dlog
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
-import kotlinx.coroutines.yield
 import kotlinx.coroutines.launch
 
 const val TAG = "EqViewModel"
@@ -28,124 +33,125 @@ class EqualizerViewModel(
     private val repository: EqualizerRepository
 ) : ViewModel() {
 
-    private val _presets = MutableStateFlow<List<Preset>>(repository.builtInPresets)
+    private val _presets = MutableStateFlow(repository.builtInPresets)
     val presets = _presets.asStateFlow()
-
-    private val _preset = MutableStateFlow<Preset>(repository.defaultPreset)
+    private val _preset = MutableStateFlow(repository.defaultPreset)
     val preset = _preset.asStateFlow()
-
-    private var presetRestored = false
-    private var currentProfile = repository.activeProfile
+    private val _isLoading = MutableStateFlow(true)
+    val isLoading = _isLoading.asStateFlow()
     val activeProfile = repository.activeProfileFlow
 
-    init {
-        // Update the list of presets: combined list of user defined presets if any,
-        // and then the built in presets.
-        repository.userPresets
-            .onEach { presets ->
-                dlog(TAG, "updated userPresets: $presets")
-                _presets.value = mutableListOf<Preset>().apply {
-                    addAll(presets)
-                    addAll(repository.builtInPresets)
-                }.toList()
+    private var currentProfile = repository.activeProfile
+    private var loadedRevision = repository.settingsRevision
+    private val refreshRequests = MutableStateFlow(0L)
+    // Capture the target profile when an edit happens, then persist edits in order.
+    // Displaying or refreshing a curve must never write it back into DAX.
+    private val operations = Channel<suspend () -> Unit>(Channel.UNLIMITED)
 
-                // We can restore the active preset only after the presets list is populated,
-                // since we do not save the preset name but only its gains.
-                if (!presetRestored) {
-                    val bandGains = repository.getBandGains()
-                    _preset.value = _presets.value.find {
-                        bandGains == it.bandGains
-                    } ?: Preset(bandGains = bandGains)
-                    dlog(TAG, "restored preset: ${_preset.value}")
-                    presetRestored = true
-                    if (repository.activeProfile != currentProfile) {
-                        refreshProfile(repository.activeProfile)
+    init {
+        viewModelScope.launch {
+            for (operation in operations) {
+                try {
+                    operation()
+                } catch (exception: CancellationException) {
+                    throw exception
+                } catch (exception: Exception) {
+                    Log.e(TAG, "Failed to save equalizer settings", exception)
+                    refresh()
+                }
+            }
+        }
+
+        repository.userPresets.onEach { userPresets ->
+            _presets.value = userPresets + repository.builtInPresets
+            if (!_isLoading.value && _preset.value.name == null && !_preset.value.isMutated) {
+                _preset.value = resolvePreset(_preset.value.bandGains, _preset.value)
+            }
+        }.launchIn(viewModelScope)
+
+        viewModelScope.launch {
+            combine(
+                repository.activeProfileFlow,
+                repository.settingsRevisionFlow,
+                refreshRequests,
+            ) { profile, revision, _ -> profile to revision }
+                .collectLatest { (profile, revision) ->
+                    _isLoading.value = true
+                    // A quick return to a profile must see its last queued edit.
+                    val pendingEditsFinished = CompletableDeferred<Unit>()
+                    operations.send { pendingEditsFinished.complete(Unit) }
+                    pendingEditsFinished.await()
+                    val gains = repository.getBandGains(profile)
+                    if (profile == repository.activeProfile && revision == repository.settingsRevision) {
+                        currentProfile = profile
+                        loadedRevision = revision
+                        _preset.value = resolvePreset(gains)
+                        _isLoading.value = false
                     }
                 }
-            }
-            .launchIn(viewModelScope)
-
-        repository.activeProfileFlow
-            .onEach { profile ->
-                if (presetRestored && profile != currentProfile) refreshProfile(profile)
-            }
-            .launchIn(viewModelScope)
-
-        // Update the preset in repository everytime we set it here
-        _preset
-            .drop(1) // skip the initial value
-            .onEach {
-                // wait till the active preset is restored
-                if (!presetRestored) {
-                    return@onEach
-                }
-                dlog(TAG, "updated preset: $it")
-                repository.setBandGains(it.bandGains, currentProfile)
-                if (it.isUserDefined) {
-                    repository.addPreset(it)
-                }
-            }
-            .launchIn(viewModelScope)
+        }
     }
 
-    fun reset() {
-        dlog(TAG, "reset()")
-        if (_preset.value.isUserDefined) {
-            // Reset gains to 0
-            _preset.value = _preset.value.copy(
-                bandGains = repository.defaultPreset.bandGains
-            )
-        } else {
-            // Switch to flat preset
-            _preset.value = repository.defaultPreset
+    private fun resolvePreset(gains: List<BandGain>, previous: Preset? = null): Preset {
+        val named = _presets.value.find {
+            it.name == previous?.name && it.isUserDefined == previous?.isUserDefined && it.bandGains == gains
+        }
+        return named ?: _presets.value.find { it.bandGains == gains } ?: Preset(bandGains = gains)
+    }
+
+    private fun canEdit() = !_isLoading.value && currentProfile == repository.activeProfile &&
+        loadedRevision == repository.settingsRevision
+
+    private fun applyPreset(preset: Preset) {
+        if (!canEdit()) return
+        val profile = currentProfile
+        val revision = loadedRevision
+        _preset.value = preset
+        operations.trySend {
+            if (repository.setBandGains(preset.bandGains, profile, revision) && preset.isUserDefined) {
+                repository.addPreset(preset)
+            }
         }
     }
 
     fun refresh() {
-        viewModelScope.launch {
-            while (!presetRestored) yield()
-            refreshProfile(repository.activeProfile)
-        }
+        _isLoading.value = true
+        refreshRequests.value++
     }
 
-    private suspend fun refreshProfile(profile: Int) {
-        currentProfile = profile
-        val gains = repository.getBandGains(profile)
-        _preset.value = _presets.value.find { gains == it.bandGains }
-            ?: Preset(bandGains = gains)
+    fun reset() {
+        dlog(TAG, "reset()")
+        val current = _preset.value
+        applyPreset(
+            if (current.isUserDefined) current.copy(bandGains = repository.defaultPreset.bandGains)
+            else repository.defaultPreset,
+        )
     }
 
     fun setPreset(preset: Preset) {
         dlog(TAG, "setPreset($preset)")
-        _preset.value = preset
+        applyPreset(preset)
     }
 
     fun setGain(index: Int, gain: Int) {
-        dlog(TAG, "setGain($index, $gain)")
-        _preset.value = _preset.value.run {
-            copy(
-                // if we're modifying predefined preset, set name to null so UI shows "Custom"
-                name = if (!isUserDefined) null else name,
-                bandGains = bandGains
-                    .toMutableList()
-                    // create a new object to ensure the flow emits an update.
-                    .apply { this[index] = this[index].copy(gain = gain) }
-                    .toList(),
-                isMutated = true
-            )
-        }
+        if (index !in _preset.value.bandGains.indices) return
+        val current = _preset.value
+        applyPreset(current.copy(
+            name = if (current.isUserDefined) current.name else null,
+            bandGains = current.bandGains.mapIndexed { bandIndex, band ->
+                if (bandIndex == index) band.copy(gain = gain.coerceIn(-100, 100)) else band
+            },
+            isMutated = true,
+        ))
     }
 
-    // Returns string containing the error message if it failed, otherwise null
     private fun validatePresetName(name: String, excluding: Preset? = null): PresetNameValidationError? {
         val normalizedName = name.trim()
         return if (normalizedName.isEmpty()) {
             PresetNameValidationError.NAME_EMPTY
-        } else if (
-            _presets.value.any {
-                it != excluding && it.name?.equals(normalizedName, ignoreCase = true) == true
-            }
-        ) {
+        } else if (_presets.value.any {
+                it.name != excluding?.name && it.name?.equals(normalizedName, ignoreCase = true) == true
+            }) {
             PresetNameValidationError.NAME_EXISTS
         } else if (normalizedName.length > 50) {
             PresetNameValidationError.NAME_TOO_LONG
@@ -153,55 +159,43 @@ class EqualizerViewModel(
     }
 
     fun createNewPreset(name: String): PresetNameValidationError? {
-        dlog(TAG, "createNewPreset($name)")
-        validatePresetName(name)?.let {
-            dlog(TAG, "createNewPreset failed: $it")
-            return it
-        }
-        _preset.value = _preset.value.copy(
-            name = name.trim(),
-            isUserDefined = true,
-            isMutated = false
-        )
+        validatePresetName(name)?.let { return it }
+        applyPreset(_preset.value.copy(name = name.trim(), isUserDefined = true, isMutated = false))
         return null
     }
 
-    fun importPreset(name: String, bandGains: List<co.aospa.dolby.xiaomi.geq.data.BandGain>): PresetNameValidationError? {
-        val normalizedName = name.trim()
-        validatePresetName(normalizedName)?.let { return it }
-        _preset.value = Preset(
-            name = normalizedName,
-            bandGains = bandGains,
-            isUserDefined = true,
-        )
+    fun importPreset(name: String, bandGains: List<BandGain>): PresetNameValidationError? {
+        validatePresetName(name)?.let { return it }
+        applyPreset(Preset(name = name.trim(), bandGains = bandGains, isUserDefined = true))
         return null
     }
 
     fun renamePreset(preset: Preset, name: String): PresetNameValidationError? {
-        dlog(TAG, "renamePreset($preset, $name)")
-        // create a preset with the new name and same gains
-        validatePresetName(name, excluding = preset)?.let {
-            dlog(TAG, "renamePreset failed")
-            return it
-        }
-        _preset.value = _preset.value.copy(
-            name = name.trim(),
-            isUserDefined = true,
-            isMutated = false
+        val normalizedName = name.trim()
+        validatePresetName(normalizedName, excluding = preset)?.let { return it }
+        if (normalizedName == preset.name) return null
+        val current = _preset.value
+        val isActive = current.isUserDefined && current.name == preset.name
+        val replacement = (if (isActive) current else preset).copy(
+            name = normalizedName,
+            isMutated = false,
         )
-        // and delete the old one.
-        deletePreset(preset, shouldReset = false)
+        if (isActive) _preset.value = replacement
+        operations.trySend { repository.renamePreset(preset, replacement) }
         return null
     }
 
     fun deletePreset(preset: Preset, shouldReset: Boolean = true) {
-        dlog(TAG, "deletePreset($preset)")
-        viewModelScope.launch {
-            repository.removePreset(preset)
+        val current = _preset.value
+        operations.trySend { repository.removePreset(preset) }
+        if (shouldReset && current.isUserDefined && current.name == preset.name) {
+            applyPreset(repository.defaultPreset)
         }
-        if (shouldReset) {
-            _preset.value = repository.defaultPreset
-        }
+    }
+
+    override fun onCleared() {
+        operations.close()
+        super.onCleared()
     }
 
     companion object {

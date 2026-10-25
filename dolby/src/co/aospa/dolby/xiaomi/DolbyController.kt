@@ -36,6 +36,10 @@ internal class DolbyController private constructor(
     val enabled = _enabled.asStateFlow()
     private val _activeProfile = MutableStateFlow(0)
     val activeProfile = _activeProfile.asStateFlow()
+    // Keep EQ writes and profile resets ordered, including writes queued from the UI.
+    internal val settingsLock = Any()
+    private val _settingsRevision = MutableStateFlow(0L)
+    internal val settingsRevision = _settingsRevision.asStateFlow()
     private var appProfileOverride: Int? = null
 
     // Restore current profile on every media session
@@ -142,15 +146,12 @@ internal class DolbyController private constructor(
             profile
         )
         setVolumeLevelerEnabled(
-            // force disable if unsupported, else force enable on dynamic profile
-            volumeLevelerSupported && (profile == 0 ||
-                prefs.getBoolean(DolbyConstants.PREF_VOLUME, getVolumeLevelerEnabled(profile))),
+            volumeLevelerSupported && prefs.getBoolean(
+                DolbyConstants.PREF_VOLUME,
+                getVolumeLevelerEnabled(profile),
+            ),
             profile
         )
-        if (profile == 0) {
-            // below settings are not applicable for dynamic
-            return
-        }
         setIeqPreset(
             prefs.getString(
                 DolbyConstants.PREF_IEQ,
@@ -254,24 +255,32 @@ internal class DolbyController private constructor(
     }
 
     fun resetProfileSpecificSettings(profile: Int = this.profile) {
-        dlog(TAG, "resetProfileSpecificSettings($profile)")
-        checkEffect()
-        dolbyEffect.resetProfileSpecificSettings(profile)
-        context.deleteSharedPreferences("profile_$profile")
+        synchronized(settingsLock) {
+            dlog(TAG, "resetProfileSpecificSettings($profile)")
+            checkEffect()
+            dolbyEffect.resetProfileSpecificSettings(profile)
+            // Clear existing instances too: stores held by an open screen must not
+            // write their pre-reset values back after the reset.
+            context.getSharedPreferences("profile_$profile", Context.MODE_PRIVATE)
+                .edit().clear().apply()
+            _settingsRevision.value++
+        }
     }
 
     fun resetAllProfiles() {
-        dlog(TAG, "resetAllProfiles")
-        checkEffect()
-        // Reset profile-specific settings
-        context.resources.getStringArray(R.array.dolby_profile_values)
-            .map { it.toInt() }
-            .forEach { resetProfileSpecificSettings(it) }
-        // Set default dynamic profile
-        profile = 0
-        PreferenceManager.getDefaultSharedPreferences(context).edit()
-            .putString(DolbyConstants.PREF_PROFILE, "0")
-            .apply()
+        synchronized(settingsLock) {
+            dlog(TAG, "resetAllProfiles")
+            checkEffect()
+            // Reset profile-specific settings
+            context.resources.getStringArray(R.array.dolby_profile_values)
+                .map { it.toInt() }
+                .forEach { resetProfileSpecificSettings(it) }
+            // Set default dynamic profile
+            profile = 0
+            PreferenceManager.getDefaultSharedPreferences(context).edit()
+                .putString(DolbyConstants.PREF_PROFILE, "0")
+                .apply()
+        }
     }
 
     fun getPreset(profile: Int = this.profile): String {
