@@ -6,6 +6,9 @@
 
 package co.aospa.dolby.xiaomi.geq.ui
 
+import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -22,10 +25,12 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import co.aospa.dolby.xiaomi.R
@@ -36,8 +41,24 @@ fun EqualizerScreen(
     enabled: Boolean = true,
     modifier: Modifier = Modifier,
 ) {
+    // Keep result registrations alive while a profile refresh replaces the editor
+    // with its loading/error UI. Transfer snapshots live in the ViewModel.
+    val importLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) {
+        viewModel.readImportedPreset(it)
+    }
+    val exportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) {
+        viewModel.writeExportedPreset(it)
+    }
     val isLoading by viewModel.isLoading.collectAsState()
     val hasLoadError by viewModel.hasLoadError.collectAsState()
+    val hasSaveError by viewModel.hasSaveError.collectAsState()
+    val context = LocalContext.current
+    LaunchedEffect(hasSaveError) {
+        if (hasSaveError) {
+            Toast.makeText(context, R.string.dolby_eq_apply_error, Toast.LENGTH_SHORT).show()
+            viewModel.dismissSaveError()
+        }
+    }
     Surface(modifier = modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         if (enabled && hasLoadError) {
             Box(Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
@@ -79,7 +100,11 @@ fun EqualizerScreen(
                         )
                     }
                 } else {
-                    PresetSelector(viewModel = viewModel)
+                    PresetSelector(
+                        viewModel = viewModel,
+                        onImport = { importLauncher.launch(arrayOf("application/json", "application/octet-stream")) },
+                        onExport = { viewModel.prepareExport()?.let { exportLauncher.launch(it) } },
+                    )
                     EqualizerBands(viewModel = viewModel)
                 }
             }

@@ -6,8 +6,6 @@
 
 package co.aospa.dolby.xiaomi.geq.ui
 
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -76,7 +74,6 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.style.TextOverflow
@@ -84,15 +81,14 @@ import androidx.compose.ui.unit.dp
 import co.aospa.dolby.xiaomi.R
 import co.aospa.dolby.xiaomi.performDolbySelectionHaptic
 import co.aospa.dolby.xiaomi.geq.data.Preset
-import co.aospa.dolby.xiaomi.geq.data.PresetFileTransfer
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
-import androidx.compose.runtime.rememberCoroutineScope
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun PresetSelector(viewModel: EqualizerViewModel) {
+fun PresetSelector(
+    viewModel: EqualizerViewModel,
+    onImport: () -> Unit,
+    onExport: () -> Unit,
+) {
     val presets by viewModel.presets.collectAsState()
     val currentPreset by viewModel.preset.collectAsState()
     var expanded by remember { mutableStateOf(false) }
@@ -100,26 +96,9 @@ fun PresetSelector(viewModel: EqualizerViewModel) {
     var showPresetManager by remember { mutableStateOf(false) }
     var presetToRename by remember { mutableStateOf<Preset?>(null) }
     var presetToDelete by remember { mutableStateOf<Preset?>(null) }
-    var importedPreset by remember { mutableStateOf<Preset?>(null) }
-    var pendingExport by remember { mutableStateOf<Preset?>(null) }
-    var transferError by remember { mutableStateOf(false) }
-    val context = LocalContext.current
+    val importedPreset by viewModel.importedPreset.collectAsState()
+    val transferError by viewModel.transferError.collectAsState()
     val hapticView = LocalView.current
-    val scope = rememberCoroutineScope()
-    val importLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        if (uri != null) scope.launch {
-            val result = withContext(Dispatchers.IO) { runCatching { PresetFileTransfer.read(context, uri) } }
-            result.onSuccess { importedPreset = it }.onFailure { transferError = true }
-        }
-    }
-    val exportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
-        val preset = pendingExport
-        if (uri != null && preset != null) scope.launch {
-            val result = withContext(Dispatchers.IO) { runCatching { PresetFileTransfer.write(context, uri, preset) } }
-            if (result.isFailure) transferError = true
-            pendingExport = null
-        } else pendingExport = null
-    }
 
     ExposedDropdownMenuBox(
         expanded = expanded,
@@ -278,11 +257,8 @@ fun PresetSelector(viewModel: EqualizerViewModel) {
                         Spacer(Modifier.height(8.dp))
                         PresetTransferActions(
                             canExport = currentPreset.isUserDefined,
-                            onImport = { importLauncher.launch(arrayOf("application/json", "application/octet-stream")) },
-                            onExport = {
-                                pendingExport = currentPreset
-                                exportLauncher.launch("${currentPreset.name.orEmpty().replace(' ', '_')}.ldp")
-                            },
+                            onImport = onImport,
+                            onExport = onExport,
                         )
                         Text(
                             text = stringResource(R.string.dolby_geq_preset_help),
@@ -362,16 +338,16 @@ fun PresetSelector(viewModel: EqualizerViewModel) {
                     if (it == null) showPresetManager = false
                 }
             },
-            onDismissDialog = { importedPreset = null },
+            onDismissDialog = viewModel::dismissImportedPreset,
         )
     }
     if (transferError) {
         AlertDialog(
-            onDismissRequest = { transferError = false },
+            onDismissRequest = viewModel::dismissTransferError,
             title = { Text(stringResource(R.string.dolby_geq_transfer_error_title)) },
             text = { Text(stringResource(R.string.dolby_geq_transfer_error)) },
             confirmButton = {
-                androidx.compose.material3.TextButton(onClick = { transferError = false }) {
+                androidx.compose.material3.TextButton(onClick = viewModel::dismissTransferError) {
                     Text(stringResource(android.R.string.ok))
                 }
             },
