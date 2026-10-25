@@ -19,25 +19,28 @@
     <string name="dolby_advanced_disabled">Turn on Dolby Atmos to adjust advanced settings.</string>
     <string name="dolby_profile_context">%1$s profile</string>
     <string name="dolby_profile_title">Choose a profile</string>
+    <string name="dolby_profile_picker_summary">Choose the Dolby tuning that suits what you’re listening to.</string>
     <string name="dolby_profile_label">Profile</string>
     <string name="dolby_profile_change">Change</string>
+    <string name="dolby_profile_recommended">Recommended</string>
     <string name="dolby_profile_dynamic_summary">Dolby adjusts sound automatically.</string>
     <string name="dolby_profile_video_summary">For films and other video.</string>
     <string name="dolby_profile_music_summary">For music playback.</string>
     <string name="dolby_profile_voice_summary">For speech and calls.</string>
-    <string name="dolby_profile_spatial_summary">For a wider, more immersive sound.</string>
     <string name="dolby_profile_custom_summary">Your manually adjusted profile.</string>
+    <string name="dolby_spatial_audio_title">Spatial audio</string>
+    <string name="dolby_spatial_audio_summary">Open Sound settings, then select Spatial audio.</string>
     <string name="dolby_app_profiles">App profiles</string>
     <string name="dolby_app_profiles_card_summary">Assign sound profiles to apps.</string>
     <string name="dolby_app_profiles_summary">Assigned profiles apply while an app is active. Apps without an assignment use your Home profile.</string>
     <string name="dolby_app_profiles_setup_title">Set up app profiles</string>
-    <string name="dolby_app_profiles_setup_summary">Choose a profile for each app. Turn on Automatic switching to apply it while you use that app. Apps with the same profile share EQ and Bass settings. “Use default” follows Home. Advanced settings apply to all profiles.</string>
+    <string name="dolby_app_profiles_setup_summary">Choose a profile for each app, then turn on Automatic switching. Unassigned apps follow Home. Apps on the same profile share EQ and Bass; Advanced settings apply to all profiles.</string>
     <string name="dolby_app_profiles_setup_dismiss">Got it</string>
     <string name="dolby_app_profiles_setup_access_title">Allow automatic switching</string>
-    <string name="dolby_app_profiles_setup_access_summary">To apply profiles automatically, Dolby needs to know which app is active. Allow Usage Access in Android Settings. Return here and turn on Automatic switching.</string>
+    <string name="dolby_app_profiles_setup_access_summary">Allow Usage Access so Dolby can detect the app in use. Return here and turn on Automatic switching.</string>
     <string name="dolby_app_profiles_setup_not_now">Not now</string>
     <string name="dolby_app_profiles_enable">Automatic switching</string>
-    <string name="dolby_app_profiles_switch_off">Turn on this switch to apply app profiles.</string>
+    <string name="dolby_app_profiles_switch_off">Turn on this switch to apply assigned profiles.</string>
     <string name="dolby_app_profiles_switch_on">Profiles switch automatically for assigned apps.</string>
     <string name="dolby_app_profiles_access_required">Allow Usage Access to detect active apps.</string>
     <string name="dolby_app_profiles_help">App profile help</string>
@@ -74,6 +77,9 @@
     <string name="dolby_nav_advanced">Advanced</string>
     <string name="dolby_dialogue_strength">Dialogue strength</string>
     <string name="dolby_eq_disabled_summary">Turn on Dolby Atmos to adjust the equalizer.</string>
+    <string name="dolby_eq_guide_title">Using the equalizer</string>
+    <string name="dolby_eq_guide_summary">Select a point on the curve, then adjust its level. Save a preset to keep your changes.</string>
+    <string name="dolby_eq_guide_dismiss">Got it</string>
     <string name="dolby_eq_min_gain">−10 dB</string>
     <string name="dolby_eq_neutral_gain">0 dB</string>
     <string name="dolby_eq_max_gain">+10 dB</string>
@@ -104,7 +110,6 @@
     <string name="dolby_profile_video">Movie/Video</string>
     <string name="dolby_profile_music">Music</string>
     <string name="dolby_profile_voice">Voice</string>
-    <string name="dolby_profile_spatialaudio">Spatial audio</string>
     <string name="dolby_profile_custom">Custom</string>
 
     <!-- Dolby equalizer presets -->

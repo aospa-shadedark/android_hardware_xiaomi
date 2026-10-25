@@ -18,6 +18,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -34,6 +35,8 @@ import co.aospa.dolby.xiaomi.R
 fun EqualizerScreen(
     viewModel: EqualizerViewModel,
     enabled: Boolean = true,
+    showFirstRunGuide: Boolean = false,
+    onDismissFirstRunGuide: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val isLoading by viewModel.isLoading.collectAsState()
@@ -79,6 +82,33 @@ fun EqualizerScreen(
                         )
                     }
                 } else {
+                    if (showFirstRunGuide) {
+                        Card(
+                            shape = MaterialTheme.shapes.large,
+                            colors = CardDefaults.cardColors(
+                                containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                            ),
+                        ) {
+                            Column(
+                                Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
+                                verticalArrangement = Arrangement.spacedBy(4.dp),
+                            ) {
+                                Text(
+                                    stringResource(R.string.dolby_eq_guide_title),
+                                    style = MaterialTheme.typography.titleSmall,
+                                    color = MaterialTheme.colorScheme.onSecondaryContainer,
+                                )
+                                Text(
+                                    stringResource(R.string.dolby_eq_guide_summary),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSecondaryContainer,
+                                )
+                                TextButton(onClick = onDismissFirstRunGuide) {
+                                    Text(stringResource(R.string.dolby_eq_guide_dismiss))
+                                }
+                            }
+                        }
+                    }
                     PresetSelector(viewModel = viewModel)
                     EqualizerBands(viewModel = viewModel)
                 }
