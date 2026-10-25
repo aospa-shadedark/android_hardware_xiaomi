@@ -12,8 +12,6 @@
     <string name="dolby_powered_off_summary">Audio enhancement is off</string>
     <string name="dolby_disabled_summary">Turn on Dolby Atmos to adjust settings.</string>
     <string name="dolby_bass_summary">Boost low frequencies for the selected profile.</string>
-    <string name="dolby_dynamic_controls_summary">Dynamic adjusts audio automatically. For Dolby’s recommended tuning, leave these controls at their defaults.</string>
-    <string name="dolby_dynamic_controls_dismiss">Got it</string>
     <string name="dolby_advanced_shared_summary">These settings apply to all Dolby profiles.</string>
     <string name="dolby_advanced_reset_note">Reset profiles on Home restores Dolby defaults.</string>
     <string name="dolby_advanced_disabled">Turn on Dolby Atmos to adjust advanced settings.</string>
@@ -44,7 +42,6 @@
     <string name="dolby_app_profiles_switch_on">Profiles switch automatically for assigned apps.</string>
     <string name="dolby_app_profiles_access_required">Allow Usage Access to detect active apps.</string>
     <string name="dolby_app_profiles_help">App profile help</string>
-    <string name="dolby_help">Help</string>
     <string name="dolby_app_profiles_grant_access">Open Settings</string>
     <string name="dolby_app_profiles_search">Search apps</string>
     <string name="dolby_app_profiles_follow_default">Use default</string>
@@ -77,9 +74,6 @@
     <string name="dolby_nav_advanced">Advanced</string>
     <string name="dolby_dialogue_strength">Dialogue strength</string>
     <string name="dolby_eq_disabled_summary">Turn on Dolby Atmos to adjust the equalizer.</string>
-    <string name="dolby_eq_guide_title">Using the equalizer</string>
-    <string name="dolby_eq_guide_summary">Select a point on the curve, then adjust its level. Save a preset to keep your changes.</string>
-    <string name="dolby_eq_guide_dismiss">Got it</string>
     <string name="dolby_eq_min_gain">−10 dB</string>
     <string name="dolby_eq_neutral_gain">0 dB</string>
     <string name="dolby_eq_max_gain">+10 dB</string>
@@ -89,6 +83,8 @@
     <string name="dolby_eq_select_band">Select %1$s band</string>
     <string name="dolby_geq_add_preset_description">Save current equalizer as a preset</string>
     <string name="dolby_eq_load_error">Couldn\'t load the equalizer.</string>
+    <string name="dolby_settings_load_error">Couldn\'t load sound settings.</string>
+    <string name="dolby_settings_apply_error">Couldn\'t apply the change. Try again.</string>
     <string name="dolby_eq_retry">Try again</string>
     <string name="dolby_geq_save_new_preset">Save as new preset</string>
     <string name="dolby_geq_manage_presets">Manage presets</string>

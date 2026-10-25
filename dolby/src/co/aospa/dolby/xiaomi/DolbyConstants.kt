@@ -40,9 +40,6 @@ class DolbyConstants {
         const val PREF_BASS = "dolby_bass"
         const val PREF_VOLUME = "dolby_volume"
         const val PREF_RESET = "dolby_reset"
-        const val PREF_DYNAMIC_ADVANCED_GUIDE_SHOWN = "dolby_dynamic_advanced_guide_shown_v2"
-        const val PREF_EQ_GUIDE_SHOWN = "dolby_eq_guide_shown_v1"
-
         val PROFILE_SPECIFIC_PREFS = setOf(
             PREF_PRESET,
             PREF_IEQ,

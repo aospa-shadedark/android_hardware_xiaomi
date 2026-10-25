@@ -14,7 +14,13 @@ import android.media.AudioManager
 import android.media.Spatializer
 import android.os.Build
 import android.provider.Settings
+import android.util.Log
+import android.widget.Toast
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.clickable
@@ -51,11 +57,11 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
@@ -72,6 +78,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
@@ -100,6 +107,9 @@ import androidx.preference.PreferenceManager
 import kotlin.math.roundToInt
 import kotlin.math.abs
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -107,8 +117,6 @@ import androidx.compose.runtime.snapshotFlow
 import co.aospa.dolby.xiaomi.DolbyConstants.Companion.PREF_BASS
 import co.aospa.dolby.xiaomi.DolbyConstants.Companion.PREF_DIALOGUE
 import co.aospa.dolby.xiaomi.DolbyConstants.Companion.PREF_DIALOGUE_AMOUNT
-import co.aospa.dolby.xiaomi.DolbyConstants.Companion.PREF_DYNAMIC_ADVANCED_GUIDE_SHOWN
-import co.aospa.dolby.xiaomi.DolbyConstants.Companion.PREF_EQ_GUIDE_SHOWN
 import co.aospa.dolby.xiaomi.DolbyConstants.Companion.PREF_HP_VIRTUALIZER
 import co.aospa.dolby.xiaomi.DolbyConstants.Companion.PREF_IEQ
 import co.aospa.dolby.xiaomi.DolbyConstants.Companion.PREF_PROFILE
@@ -138,21 +146,9 @@ internal fun DolbyComposeScreen(
     val hapticView = LocalView.current
     var showReset by remember { mutableStateOf(false) }
     var showAppProfiles by remember { mutableStateOf(false) }
-    var showEqualizerGuide by remember(context) {
-        mutableStateOf(
-            !PreferenceManager.getDefaultSharedPreferences(context)
-                .getBoolean(PREF_EQ_GUIDE_SHOWN, false),
-        )
-    }
     val enabled by controller.enabled.collectAsState()
     val profile by controller.activeProfile.collectAsState()
     val settingsRevision by controller.settingsRevision.collectAsState()
-    var dynamicAdvancedGuideDismissed by remember(context) {
-        mutableStateOf(
-            PreferenceManager.getDefaultSharedPreferences(context)
-                .getBoolean(PREF_DYNAMIC_ADVANCED_GUIDE_SHOWN, false),
-        )
-    }
     LaunchedEffect(pagerState, hapticView) {
         snapshotFlow { pagerState.settledPage }
             .distinctUntilChanged()
@@ -167,12 +163,6 @@ internal fun DolbyComposeScreen(
         context.resources.getStringArray(R.array.dolby_profile_values)
             .mapNotNull { it.toIntOrNull() }
     }
-    fun updateAdvancedSettingForAllProfiles(update: (Int, DolbyPreferenceStore) -> Unit) {
-        profileIds.forEach { profileId ->
-            val profileStore = DolbyPreferenceStore(context).apply { this.profile = profileId }
-            update(profileId, profileStore)
-        }
-    }
     var bass by remember { mutableStateOf(false) }
     var volume by remember { mutableStateOf(false) }
     var dialogue by remember { mutableStateOf(false) }
@@ -181,21 +171,63 @@ internal fun DolbyComposeScreen(
     var ieq by remember { mutableStateOf(0) }
     var dialogueAmount by remember { mutableStateOf(0f) }
     var stereoAmount by remember { mutableStateOf(0f) }
+    var loadedSettingsKey by remember { mutableStateOf<Pair<Int, Long>?>(null) }
+    var failedSettingsKey by remember { mutableStateOf<Pair<Int, Long>?>(null) }
+    var settingsRetry by remember { mutableIntStateOf(0) }
+    val settingsKey = profile to settingsRevision
+    val settingsLoaded = loadedSettingsKey == settingsKey
+    val settingsLoadError = failedSettingsKey == settingsKey
     val destinationTitle = when (destination) {
         DolbyDestination.HOME -> R.string.dolby_nav_home
         DolbyDestination.EQUALIZER -> R.string.dolby_nav_equalizer
         DolbyDestination.ADVANCED -> R.string.dolby_nav_advanced
     }
 
-    LaunchedEffect(profile, settingsRevision) {
-        bass = controller.getBassEnhancerEnabled(profile)
-        volume = controller.getVolumeLevelerEnabled(profile)
-        dialogue = controller.getDialogueEnhancerEnabled(profile)
-        hpVirtualizer = controller.getHeadphoneVirtEnabled(profile)
-        spkVirtualizer = controller.getSpeakerVirtEnabled(profile)
-        ieq = controller.getIeqPreset(profile)
-        dialogueAmount = controller.getDialogueEnhancerAmount(profile).toFloat()
-        stereoAmount = controller.getStereoWideningAmount(profile).toFloat()
+    LaunchedEffect(profile, settingsRevision, settingsRetry) {
+        loadedSettingsKey = null
+        failedSettingsKey = null
+        try {
+            val settings = withContext(Dispatchers.IO) { controller.readProfileSettings(profile) }
+            bass = settings.bass
+            volume = settings.volume
+            dialogue = settings.dialogue
+            hpVirtualizer = settings.hpVirtualizer
+            spkVirtualizer = settings.spkVirtualizer
+            ieq = settings.ieq
+            dialogueAmount = settings.dialogueAmount.toFloat()
+            stereoAmount = settings.stereoAmount.toFloat()
+            loadedSettingsKey = settingsKey
+        } catch (exception: CancellationException) {
+            throw exception
+        } catch (exception: Exception) {
+            Log.e("DolbySettings", "Unable to read profile $profile", exception)
+            failedSettingsKey = settingsKey
+        }
+    }
+
+    fun applySetting(change: () -> Unit) {
+        try {
+            change()
+        } catch (exception: Exception) {
+            Log.e("DolbySettings", "Unable to apply settings", exception)
+            Toast.makeText(context, R.string.dolby_settings_apply_error, Toast.LENGTH_SHORT).show()
+            settingsRetry++
+        }
+    }
+
+    fun updateAdvancedSettingForAllProfiles(
+        onApplied: () -> Unit = {},
+        update: (Int, DolbyPreferenceStore) -> Unit,
+    ) {
+        applySetting {
+            synchronized(controller.settingsLock) {
+                profileIds.forEach { profileId ->
+                    val profileStore = DolbyPreferenceStore(context).apply { this.profile = profileId }
+                    update(profileId, profileStore)
+                }
+            }
+            onApplied()
+        }
     }
 
     Scaffold(
@@ -213,7 +245,10 @@ internal fun DolbyComposeScreen(
                             color = MaterialTheme.colorScheme.surfaceContainerHigh,
                         ) {
                             IconButton(
-                                onClick = { showReset = true },
+                                onClick = {
+                                    hapticView.performDolbySelectionHaptic()
+                                    showReset = true
+                                },
                                 modifier = Modifier.height(42.dp).width(42.dp),
                             ) {
                                 Icon(
@@ -224,24 +259,6 @@ internal fun DolbyComposeScreen(
                             }
                         }
                     }
-                    if (destination == DolbyDestination.EQUALIZER && enabled) {
-                        IconButton(onClick = { showEqualizerGuide = true }) {
-                            Icon(
-                                imageVector = Icons.Default.Info,
-                                contentDescription = stringResource(R.string.dolby_help),
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-                    }
-                    if (destination == DolbyDestination.ADVANCED && profile == 0 && enabled) {
-                        IconButton(onClick = { dynamicAdvancedGuideDismissed = false }) {
-                            Icon(
-                                imageVector = Icons.Default.Info,
-                                contentDescription = stringResource(R.string.dolby_help),
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-                    }
                 },
             )
         },
@@ -250,6 +267,7 @@ internal fun DolbyComposeScreen(
             HorizontalPager(
                 state = pagerState,
                 modifier = Modifier.weight(1f),
+                beyondViewportPageCount = 1,
             ) { pageIndex ->
                 val page = DolbyDestination.values()[pageIndex]
                 pageStateHolder.SaveableStateProvider(page.name) {
@@ -258,49 +276,46 @@ internal fun DolbyComposeScreen(
                             enabled = enabled,
                             profile = profile,
                             bass = bass,
+                            settingsLoaded = settingsLoaded,
+                            settingsLoadError = settingsLoadError,
+                            onRetrySettings = { settingsRetry++ },
                             onAppProfilesClick = { showAppProfiles = true },
                             onEnabledChange = { value ->
-                                controller.setDsOnAndPersist(value)
-                                val appProfiles = AppProfileManager(context)
-                                if (appProfiles.isEnabled && appProfiles.hasUsageAccess()) {
-                                    if (value) DolbyAppProfileService.start(context)
-                                    else DolbyAppProfileService.stop(context)
+                                applySetting {
+                                    controller.setDsOnAndPersist(value)
+                                    val appProfiles = AppProfileManager(context)
+                                    if (appProfiles.isEnabled && appProfiles.hasUsageAccess()) {
+                                        if (value) DolbyAppProfileService.start(context)
+                                        else DolbyAppProfileService.stop(context)
+                                    }
                                 }
                             },
                             onProfileSelected = { selected ->
-                                controller.profile = selected
-                                PreferenceManager.getDefaultSharedPreferences(context).edit()
-                                    .putString(PREF_PROFILE, selected.toString()).apply()
+                                applySetting {
+                                    controller.profile = selected
+                                    PreferenceManager.getDefaultSharedPreferences(context).edit()
+                                        .putString(PREF_PROFILE, selected.toString()).apply()
+                                }
                             },
                             onBassChange = { value ->
-                                controller.setBassEnhancerEnabled(value, profile)
-                                store.putBoolean(PREF_BASS, value)
-                                bass = value
+                                applySetting {
+                                    controller.setBassEnhancerEnabled(value, profile)
+                                    store.putBoolean(PREF_BASS, value)
+                                    bass = value
+                                }
                             },
                         )
                         DolbyDestination.EQUALIZER -> EqualizerScreen(
                             viewModel = equalizerViewModel,
                             enabled = enabled,
-                            showFirstRunGuide = showEqualizerGuide,
-                            onDismissFirstRunGuide = {
-                                PreferenceManager.getDefaultSharedPreferences(context).edit()
-                                    .putBoolean(PREF_EQ_GUIDE_SHOWN, true)
-                                    .apply()
-                                showEqualizerGuide = false
-                            },
                             modifier = Modifier.fillMaxSize(),
                         )
                         DolbyDestination.ADVANCED -> AdvancedPage(
                             context = context,
                             enabled = enabled,
-                            profile = profile,
-                            showDynamicGuide = profile == 0 && !dynamicAdvancedGuideDismissed,
-                            onDismissDynamicGuide = {
-                                PreferenceManager.getDefaultSharedPreferences(context).edit()
-                                    .putBoolean(PREF_DYNAMIC_ADVANCED_GUIDE_SHOWN, true)
-                                    .apply()
-                                dynamicAdvancedGuideDismissed = true
-                            },
+                            settingsLoaded = settingsLoaded,
+                            settingsLoadError = settingsLoadError,
+                            onRetrySettings = { settingsRetry++ },
                             volume = volume,
                             dialogue = dialogue,
                             hpVirtualizer = hpVirtualizer,
@@ -309,39 +324,34 @@ internal fun DolbyComposeScreen(
                             dialogueAmount = dialogueAmount,
                             stereoAmount = stereoAmount,
                             onIeqChange = { value ->
-                                updateAdvancedSettingForAllProfiles { targetProfile, targetStore ->
+                                updateAdvancedSettingForAllProfiles(onApplied = { ieq = value }) { targetProfile, targetStore ->
                                     controller.setIeqPreset(value, targetProfile)
                                     targetStore.putString(PREF_IEQ, value.toString())
                                 }
-                                ieq = value
                             },
                             onSpeakerVirtualizerChange = { value ->
-                                updateAdvancedSettingForAllProfiles { targetProfile, targetStore ->
+                                updateAdvancedSettingForAllProfiles(onApplied = { spkVirtualizer = value }) { targetProfile, targetStore ->
                                     controller.setSpeakerVirtEnabled(value, targetProfile)
                                     targetStore.putBoolean(PREF_SPK_VIRTUALIZER, value)
                                 }
-                                spkVirtualizer = value
                             },
                             onHeadphoneVirtualizerChange = { value ->
-                                updateAdvancedSettingForAllProfiles { targetProfile, targetStore ->
+                                updateAdvancedSettingForAllProfiles(onApplied = { hpVirtualizer = value }) { targetProfile, targetStore ->
                                     controller.setHeadphoneVirtEnabled(value, targetProfile)
                                     targetStore.putBoolean(PREF_HP_VIRTUALIZER, value)
                                 }
-                                hpVirtualizer = value
                             },
                             onDialogueChange = { value ->
-                                updateAdvancedSettingForAllProfiles { targetProfile, targetStore ->
+                                updateAdvancedSettingForAllProfiles(onApplied = { dialogue = value }) { targetProfile, targetStore ->
                                     controller.setDialogueEnhancerEnabled(value, targetProfile)
                                     targetStore.putBoolean(PREF_DIALOGUE, value)
                                 }
-                                dialogue = value
                             },
                             onVolumeChange = { value ->
-                                updateAdvancedSettingForAllProfiles { targetProfile, targetStore ->
+                                updateAdvancedSettingForAllProfiles(onApplied = { volume = value }) { targetProfile, targetStore ->
                                     controller.setVolumeLevelerEnabled(value, targetProfile)
                                     targetStore.putBoolean(PREF_VOLUME, value)
                                 }
-                                volume = value
                             },
                             onDialogueAmountChange = { dialogueAmount = it },
                             onDialogueAmountFinished = { value ->
@@ -377,7 +387,8 @@ internal fun DolbyComposeScreen(
             text = { Text(stringResource(R.string.dolby_reset_all_message)) },
             confirmButton = {
                 TextButton(onClick = {
-                    onResetAll()
+                    hapticView.performDolbySelectionHaptic()
+                    applySetting { onResetAll() }
                     showReset = false
                 }) { Text(stringResource(R.string.dolby_reset_action)) }
             },
@@ -408,7 +419,9 @@ private fun DolbyBottomBar(
         color = MaterialTheme.colorScheme.surfaceContainerLow,
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
     ) {
-        BoxWithConstraints(Modifier.fillMaxWidth().padding(5.dp)) {
+        BoxWithConstraints(
+            Modifier.fillMaxWidth().padding(5.dp).clip(RoundedCornerShape(23.dp)),
+        ) {
             val itemWidth = maxWidth / DolbyDestination.values().size
             val indicatorWidth = (itemWidth - 8.dp).coerceAtLeast(0.dp)
             val itemWidthPx = with(density) { itemWidth.toPx() }.coerceAtLeast(1f)
@@ -487,6 +500,13 @@ private fun BottomBarItem(
     onSelect: (DolbyDestination) -> Unit,
 ) {
     val active = item.ordinal == selectedIndex
+    val interactionSource = remember { MutableInteractionSource() }
+    val pressed by interactionSource.collectIsPressedAsState()
+    val contentScale by animateFloatAsState(
+        targetValue = if (pressed) .96f else 1f,
+        animationSpec = tween(120),
+        label = "navigation item press",
+    )
     val iconColor by animateColorAsState(
         targetValue = if (active) MaterialTheme.colorScheme.onSecondaryContainer
             else MaterialTheme.colorScheme.onSurfaceVariant,
@@ -494,14 +514,20 @@ private fun BottomBarItem(
     )
     Column(
         modifier = modifier
+            .clip(RoundedCornerShape(22.dp))
             .selectable(
                 selected = active,
                 role = Role.Tab,
+                interactionSource = interactionSource,
                 indication = null,
                 onClick = { onSelect(item) },
             )
             .fillMaxHeight()
             .heightIn(min = 58.dp)
+            .graphicsLayer {
+                scaleX = contentScale
+                scaleY = contentScale
+            }
             .padding(horizontal = 4.dp, vertical = 6.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(4.dp),
@@ -528,6 +554,9 @@ private fun HomePage(
     enabled: Boolean,
     profile: Int,
     bass: Boolean,
+    settingsLoaded: Boolean,
+    settingsLoadError: Boolean,
+    onRetrySettings: () -> Unit,
     onAppProfilesClick: () -> Unit,
     onEnabledChange: (Boolean) -> Unit,
     onProfileSelected: (Int) -> Unit,
@@ -544,7 +573,14 @@ private fun HomePage(
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
         ) {
             Row(
-                Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 16.dp),
+                Modifier.fillMaxWidth().toggleable(
+                    value = enabled,
+                    role = Role.Switch,
+                    onValueChange = { value ->
+                        hapticView.performDolbyToggleHaptic(value)
+                        onEnabledChange(value)
+                    },
+                ).padding(horizontal = 18.dp, vertical = 16.dp),
                 horizontalArrangement = Arrangement.spacedBy(16.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
@@ -588,17 +624,17 @@ private fun HomePage(
                 }
                 Switch(
                     checked = enabled,
-                    onCheckedChange = { value ->
-                        hapticView.performDolbyToggleHaptic(value)
-                        onEnabledChange(value)
-                    },
+                    onCheckedChange = null,
                 )
             }
         }
         if (enabled) {
             ProfilePicker(profile = profile, onSelected = onProfileSelected)
             Card(
-                modifier = Modifier.fillMaxWidth().clickable(onClick = onAppProfilesClick),
+                modifier = Modifier.fillMaxWidth().clickable {
+                    hapticView.performDolbySelectionHaptic()
+                    onAppProfilesClick()
+                },
                 shape = MaterialTheme.shapes.extraLarge,
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
             ) {
@@ -634,12 +670,16 @@ private fun HomePage(
             Text(stringResource(R.string.dolby_category_settings),
                 style = MaterialTheme.typography.titleLarge.copy(fontSize = 20.sp),
                 modifier = Modifier.padding(start = 4.dp))
-            SwitchSetting(
-                title = stringResource(R.string.dolby_bass_enhancer),
-                summary = stringResource(R.string.dolby_bass_summary),
-                checked = bass,
-                onCheckedChange = onBassChange,
-            )
+            if (settingsLoaded) {
+                SwitchSetting(
+                    title = stringResource(R.string.dolby_bass_enhancer),
+                    summary = stringResource(R.string.dolby_bass_summary),
+                    checked = bass,
+                    onCheckedChange = onBassChange,
+                )
+            } else {
+                ProfileSettingsStatus(settingsLoadError, onRetrySettings)
+            }
         } else {
             Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)) {
                 Text(stringResource(R.string.dolby_disabled_summary), Modifier.padding(20.dp),
@@ -765,7 +805,10 @@ private fun ProfilePicker(profile: Int, onSelected: (Int) -> Unit) {
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)) {
         Column(Modifier.fillMaxWidth()) {
             Surface(
-                onClick = { showProfiles = true },
+                onClick = {
+                    hapticView.performDolbySelectionHaptic()
+                    showProfiles = true
+                },
                 shape = MaterialTheme.shapes.large,
                 color = MaterialTheme.colorScheme.surfaceContainerLow,
             ) {
@@ -898,9 +941,9 @@ private fun ProfilePicker(profile: Int, onSelected: (Int) -> Unit) {
 private fun AdvancedPage(
     context: Context,
     enabled: Boolean,
-    profile: Int,
-    showDynamicGuide: Boolean,
-    onDismissDynamicGuide: () -> Unit,
+    settingsLoaded: Boolean,
+    settingsLoadError: Boolean,
+    onRetrySettings: () -> Unit,
     volume: Boolean,
     dialogue: Boolean,
     hpVirtualizer: Boolean,
@@ -923,33 +966,10 @@ private fun AdvancedPage(
             .padding(horizontal = 20.dp, vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
-        if (profile == 0 && showDynamicGuide) {
-            Card(
-                shape = MaterialTheme.shapes.extraLarge,
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.secondaryContainer,
-                ),
-            ) {
-                Column(
-                    Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 14.dp),
-                    verticalArrangement = Arrangement.spacedBy(6.dp),
-                ) {
-                    Text(
-                        stringResource(R.string.dolby_dynamic_controls_summary),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSecondaryContainer,
-                    )
-                    TextButton(
-                        onClick = onDismissDynamicGuide,
-                        modifier = Modifier.align(Alignment.End),
-                    ) {
-                        Text(stringResource(R.string.dolby_dynamic_controls_dismiss))
-                    }
-                }
-            }
-        }
         if (!enabled) {
             InfoCard(stringResource(R.string.dolby_advanced_disabled))
+        } else if (!settingsLoaded) {
+            ProfileSettingsStatus(settingsLoadError, onRetrySettings)
         } else {
             val ieqEntries = stringArrayResource(R.array.dolby_ieq_entries)
             val ieqValues = stringArrayResource(R.array.dolby_ieq_values)
@@ -1013,6 +1033,31 @@ private fun AdvancedPage(
             )
         }
         Spacer(Modifier.height(12.dp))
+    }
+}
+
+@Composable
+private fun ProfileSettingsStatus(hasError: Boolean, onRetry: () -> Unit) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.extraLarge,
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+    ) {
+        if (hasError) {
+            Column(Modifier.padding(18.dp)) {
+                Text(
+                    stringResource(R.string.dolby_settings_load_error),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                TextButton(onClick = onRetry) {
+                    Text(stringResource(R.string.dolby_eq_retry))
+                }
+            }
+        } else {
+            Box(Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator(Modifier.height(24.dp).width(24.dp))
+            }
+        }
     }
 }
 
