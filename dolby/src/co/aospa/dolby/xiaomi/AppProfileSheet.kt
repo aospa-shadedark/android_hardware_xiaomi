@@ -24,6 +24,7 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -40,6 +41,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -68,8 +70,9 @@ internal fun AppProfileSheet(context: Context, onDismiss: () -> Unit) {
     val hapticView = LocalView.current
     val manager = remember(context) { AppProfileManager(context) }
     var usageAccess by remember { mutableStateOf(manager.hasUsageAccess()) }
-    var monitoring by remember { mutableStateOf(manager.isEnabled) }
+    var monitoring by remember { mutableStateOf(manager.isEnabled && manager.hasUsageAccess()) }
     var showSetupGuide by remember { mutableStateOf(!manager.hasDismissedSetupGuide()) }
+    var showUsageAccessPrompt by remember { mutableStateOf(false) }
     var query by remember { mutableStateOf("") }
     var assignments by remember { mutableStateOf(manager.assignments()) }
     val apps by produceState<List<DolbyApp>?>(null, manager) {
@@ -77,15 +80,36 @@ internal fun AppProfileSheet(context: Context, onDismiss: () -> Unit) {
     }
     val launcher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) {
         usageAccess = manager.hasUsageAccess()
-        if (usageAccess) {
-            manager.setEnabled(true)
-            monitoring = true
-            DolbyAppProfileService.start(context)
+        // Granting Usage Access is separate from opting in to automatic switching.
+        // Keep the switch off after returning; the user enables it explicitly here.
+        if (!usageAccess) {
+            manager.setEnabled(false)
+            monitoring = false
+            DolbyAppProfileService.stop(context)
         }
     }
     val profileNames = stringArrayResource(R.array.dolby_profile_entries)
     val profileValues = stringArrayResource(R.array.dolby_profile_values)
     val filteredApps = apps.orEmpty().filter { it.label.contains(query, ignoreCase = true) }
+    val switchSummary = when {
+        monitoring && usageAccess -> stringResource(R.string.dolby_app_profiles_switch_on)
+        usageAccess -> stringResource(R.string.dolby_app_profiles_switch_off)
+        else -> stringResource(R.string.dolby_app_profiles_access_required)
+    }
+
+    LaunchedEffect(manager, usageAccess) {
+        if (!usageAccess && manager.isEnabled) {
+            // Android can revoke special access independently of this app's preferences.
+            manager.setEnabled(false)
+            monitoring = false
+            DolbyAppProfileService.stop(context)
+        }
+    }
+
+    fun openUsageAccessSettings() {
+        showUsageAccessPrompt = false
+        launcher.launch(Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS))
+    }
 
     ModalBottomSheet(onDismissRequest = onDismiss) {
         LazyColumn(
@@ -154,36 +178,32 @@ internal fun AppProfileSheet(context: Context, onDismiss: () -> Unit) {
                             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
                                 Text(stringResource(R.string.dolby_app_profiles_enable), style = MaterialTheme.typography.titleMedium)
                                 Text(
-                                    if (usageAccess) stringResource(R.string.dolby_app_profiles_access_granted)
-                                    else stringResource(R.string.dolby_app_profiles_access_required),
+                                    switchSummary,
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
                             }
                             Switch(
                                 checked = monitoring && usageAccess,
+                                enabled = true,
                                 onCheckedChange = { checked ->
-                                    hapticView.performDolbyToggleHaptic(checked)
                                     if (!checked) {
+                                        hapticView.performDolbyToggleHaptic(false)
                                         manager.setEnabled(false)
                                         DolbyAppProfileService.stop(context)
                                         monitoring = false
-                                    } else if (usageAccess) {
+                                    } else if (!manager.hasUsageAccess()) {
+                                        usageAccess = false
+                                        showUsageAccessPrompt = true
+                                    } else {
+                                        hapticView.performDolbyToggleHaptic(true)
+                                        usageAccess = true
                                         manager.setEnabled(true)
                                         monitoring = true
                                         DolbyAppProfileService.start(context)
-                                    } else {
-                                        launcher.launch(Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS))
                                     }
                                 },
                             )
-                        }
-                    }
-                    if (!usageAccess) {
-                        TextButton(onClick = {
-                            launcher.launch(Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS))
-                        }) {
-                            Text(stringResource(R.string.dolby_app_profiles_grant_access))
                         }
                     }
                     OutlinedTextField(
@@ -220,6 +240,28 @@ internal fun AppProfileSheet(context: Context, onDismiss: () -> Unit) {
                 )
             }
         }
+    }
+
+    if (showUsageAccessPrompt) {
+        AlertDialog(
+            onDismissRequest = {
+                showUsageAccessPrompt = false
+            },
+            title = { Text(stringResource(R.string.dolby_app_profiles_setup_access_title)) },
+            text = { Text(stringResource(R.string.dolby_app_profiles_setup_access_summary)) },
+            confirmButton = {
+                TextButton(onClick = { openUsageAccessSettings() }) {
+                    Text(stringResource(R.string.dolby_app_profiles_grant_access))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    showUsageAccessPrompt = false
+                }) {
+                    Text(stringResource(R.string.dolby_app_profiles_setup_not_now))
+                }
+            },
+        )
     }
 }
 
