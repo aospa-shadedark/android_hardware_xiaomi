@@ -8,6 +8,7 @@ package co.aospa.dolby.xiaomi
 
 import android.content.Intent
 import android.content.ActivityNotFoundException
+import android.content.ComponentName
 import android.content.Context
 import android.media.AudioManager
 import android.media.Spatializer
@@ -652,27 +653,52 @@ private fun HomePage(
 private fun SpatialAudioCard() {
     val context = LocalContext.current
     val hapticView = LocalView.current
-    val supported = remember(context) {
+    val settingsIntent = remember(context) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S_V2) {
-            false
+            null
         } else {
-            val audioManager = context.getSystemService(AudioManager::class.java)
-            val spatializer = audioManager?.spatializer
             runCatching {
-                spatializer != null && spatializer.immersiveAudioLevel !=
+                val spatializer = context.getSystemService(AudioManager::class.java)?.spatializer
+                // Match Sound settings' SpatialAudioParentPreferenceController.
+                if (spatializer == null || spatializer.immersiveAudioLevel ==
                     Spatializer.SPATIALIZER_IMMERSIVE_LEVEL_NONE
-            }.getOrDefault(false)
+                ) return@runCatching null
+
+                val packageManager = context.packageManager
+                val directIntent = Intent("com.android.settings.action.SPATIAL_AUDIO_SETTINGS")
+                    .setPackage("com.android.settings")
+                val directActivity = packageManager.resolveActivity(directIntent, 0)?.activityInfo
+                if (directActivity?.enabled == true && directActivity.exported) {
+                    return@runCatching directIntent
+                }
+
+                val component = ComponentName("com.android.settings", "com.android.settings.SubSettings")
+                val activity = packageManager.getActivityInfo(component, 0)
+                val settingsResources = packageManager.getResourcesForApplication(activity.applicationInfo)
+                val hasScreen = settingsResources.getIdentifier(
+                    "spatial_audio_settings", "xml", component.packageName,
+                ) != 0
+                val canOpen = activity.enabled && activity.applicationInfo.enabled &&
+                    (activity.exported || activity.applicationInfo.uid == context.applicationInfo.uid)
+                if (!hasScreen || !canOpen) return@runCatching null
+
+                Intent().setComponent(component).putExtra(
+                    ":settings:show_fragment", "com.android.settings.notification.SpatialAudioSettings",
+                )
+            }.getOrNull()
         }
     }
 
-    if (supported) {
+    if (settingsIntent != null) {
         Card(
             modifier = Modifier.fillMaxWidth().clickable {
                 hapticView.performDolbySelectionHaptic()
                 try {
-                    context.startActivity(Intent(Settings.ACTION_SOUND_SETTINGS))
+                    context.startActivity(settingsIntent)
                 } catch (_: ActivityNotFoundException) {
-                    context.startActivity(Intent(Settings.ACTION_SETTINGS))
+                    runCatching { context.startActivity(Intent(Settings.ACTION_SOUND_SETTINGS)) }
+                } catch (_: SecurityException) {
+                    runCatching { context.startActivity(Intent(Settings.ACTION_SOUND_SETTINGS)) }
                 }
             },
             shape = MaterialTheme.shapes.extraLarge,

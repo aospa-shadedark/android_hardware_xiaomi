@@ -29,7 +29,7 @@
     <string name="dolby_profile_voice_summary">For speech and calls.</string>
     <string name="dolby_profile_custom_summary">Your manually adjusted profile.</string>
     <string name="dolby_spatial_audio_title">Spatial audio</string>
-    <string name="dolby_spatial_audio_summary">Open Sound settings, then select Spatial audio.</string>
+    <string name="dolby_spatial_audio_summary">Manage spatial audio in Android Settings.</string>
     <string name="dolby_app_profiles">App profiles</string>
     <string name="dolby_app_profiles_card_summary">Assign sound profiles to apps.</string>
     <string name="dolby_app_profiles_summary">Assigned profiles apply while an app is active. Apps without an assignment use your Home profile.</string>
