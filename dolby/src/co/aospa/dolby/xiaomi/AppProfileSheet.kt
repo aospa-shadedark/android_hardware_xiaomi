@@ -32,6 +32,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
@@ -47,9 +48,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringArrayResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.viewinterop.AndroidView
@@ -62,6 +65,7 @@ import kotlinx.coroutines.withContext
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun AppProfileSheet(context: Context, onDismiss: () -> Unit) {
+    val hapticView = LocalView.current
     val manager = remember(context) { AppProfileManager(context) }
     var usageAccess by remember { mutableStateOf(manager.hasUsageAccess()) }
     var monitoring by remember { mutableStateOf(manager.isEnabled) }
@@ -91,7 +95,20 @@ internal fun AppProfileSheet(context: Context, onDismiss: () -> Unit) {
         ) {
             item {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text(stringResource(R.string.dolby_app_profiles), style = MaterialTheme.typography.titleLarge)
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                    ) {
+                        Text(stringResource(R.string.dolby_app_profiles), style = MaterialTheme.typography.titleLarge)
+                        IconButton(onClick = { showSetupGuide = true }) {
+                            Icon(
+                                Icons.Default.Info,
+                                contentDescription = stringResource(R.string.dolby_app_profiles_help),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
                     Text(
                         stringResource(R.string.dolby_app_profiles_summary),
                         style = MaterialTheme.typography.bodySmall,
@@ -146,6 +163,7 @@ internal fun AppProfileSheet(context: Context, onDismiss: () -> Unit) {
                             Switch(
                                 checked = monitoring && usageAccess,
                                 onCheckedChange = { checked ->
+                                    hapticView.performDolbyToggleHaptic(checked)
                                     if (!checked) {
                                         manager.setEnabled(false)
                                         DolbyAppProfileService.stop(context)
@@ -194,6 +212,7 @@ internal fun AppProfileSheet(context: Context, onDismiss: () -> Unit) {
                     profileNames = profileNames,
                     profileValues = profileValues,
                     onSelect = { profile ->
+                        hapticView.performDolbySelectionHaptic()
                         manager.setProfile(app.packageName, profile)
                         assignments = manager.assignments()
                         if (monitoring && usageAccess) DolbyAppProfileService.start(context)

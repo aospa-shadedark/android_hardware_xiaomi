@@ -31,6 +31,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Path
@@ -48,10 +49,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import co.aospa.dolby.xiaomi.R
 import co.aospa.dolby.xiaomi.DolbySlider
+import co.aospa.dolby.xiaomi.performDolbySelectionHaptic
 import kotlin.math.roundToInt
 
 @Composable
 fun EqualizerBands(viewModel: EqualizerViewModel) {
+    val hapticView = LocalView.current
     val preset by viewModel.preset.collectAsState()
     val bandGains = preset.bandGains
     if (bandGains.isEmpty()) return
@@ -145,6 +148,7 @@ fun EqualizerBands(viewModel: EqualizerViewModel) {
                             val plotWidth = (size.width - edge * 2).coerceAtLeast(1f)
                             val position = ((tap.x - edge) / plotWidth).coerceIn(0f, 1f)
                             val index = (position * (bandGains.size - 1)).roundToInt()
+                            if (index != selected) hapticView.performDolbySelectionHaptic()
                             selected = index
                             sliderPosition = bandGains[index].gain / 100f
                         }

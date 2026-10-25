@@ -82,6 +82,6 @@ internal class AppProfileManager(private val context: Context) {
         const val PREFS = "dolby_app_profiles"
         const val KEY_ENABLED = "monitoring_enabled"
         const val KEY_APP_PREFIX = "app_profile:"
-        private const val KEY_SETUP_GUIDE_DISMISSED = "setup_guide_dismissed"
+        private const val KEY_SETUP_GUIDE_DISMISSED = "setup_guide_dismissed_v2"
     }
 }
