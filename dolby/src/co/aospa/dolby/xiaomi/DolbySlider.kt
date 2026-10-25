@@ -21,6 +21,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 
@@ -35,6 +36,7 @@ internal fun DolbySlider(
     enabled: Boolean = true,
     onValueChangeFinished: (() -> Unit)? = null,
 ) {
+    val view = LocalView.current
     val active = if (enabled) MaterialTheme.colorScheme.primary
         else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.28f)
     val inactive = MaterialTheme.colorScheme.onSurface.copy(alpha = if (enabled) 0.18f else 0.12f)
@@ -45,7 +47,10 @@ internal fun DolbySlider(
         valueRange = valueRange,
         steps = steps,
         enabled = enabled,
-        onValueChangeFinished = onValueChangeFinished,
+        onValueChangeFinished = {
+            view.performDolbySliderReleaseHaptic()
+            onValueChangeFinished?.invoke()
+        },
         thumb = {
             Box(
                 Modifier

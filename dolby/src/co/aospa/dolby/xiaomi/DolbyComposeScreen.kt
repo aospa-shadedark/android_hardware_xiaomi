@@ -50,6 +50,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -76,6 +77,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringArrayResource
 import androidx.compose.ui.res.stringResource
@@ -91,6 +93,10 @@ import androidx.preference.PreferenceManager
 import kotlin.math.roundToInt
 import kotlin.math.abs
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.distinctUntilChanged
+import androidx.compose.runtime.snapshotFlow
 import co.aospa.dolby.xiaomi.DolbyConstants.Companion.PREF_BASS
 import co.aospa.dolby.xiaomi.DolbyConstants.Companion.PREF_DIALOGUE
 import co.aospa.dolby.xiaomi.DolbyConstants.Companion.PREF_DIALOGUE_AMOUNT
@@ -121,6 +127,7 @@ internal fun DolbyComposeScreen(
     val destination = DolbyDestination.values()[pagerState.currentPage]
     val navigationScope = rememberCoroutineScope()
     val pageStateHolder = rememberSaveableStateHolder()
+    val hapticView = LocalView.current
     var showReset by remember { mutableStateOf(false) }
     var showAppProfiles by remember { mutableStateOf(false) }
     val enabled by controller.enabled.collectAsState()
@@ -131,6 +138,12 @@ internal fun DolbyComposeScreen(
             PreferenceManager.getDefaultSharedPreferences(context)
                 .getBoolean(PREF_DYNAMIC_ADVANCED_GUIDE_SHOWN, false),
         )
+    }
+    LaunchedEffect(pagerState, hapticView) {
+        snapshotFlow { pagerState.settledPage }
+            .distinctUntilChanged()
+            .drop(1)
+            .collect { hapticView.performDolbySelectionHaptic() }
     }
 
     val store = remember(context, profile) {
@@ -195,6 +208,24 @@ internal fun DolbyComposeScreen(
                                     tint = MaterialTheme.colorScheme.onSurface,
                                 )
                             }
+                        }
+                    }
+                    if (destination == DolbyDestination.EQUALIZER) {
+                        IconButton(onClick = { equalizerGuideDismissed = false }) {
+                            Icon(
+                                imageVector = Icons.Default.Info,
+                                contentDescription = stringResource(R.string.dolby_help),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                    if (destination == DolbyDestination.ADVANCED && profile == 0) {
+                        IconButton(onClick = { dynamicAdvancedGuideDismissed = false }) {
+                            Icon(
+                                imageVector = Icons.Default.Info,
+                                contentDescription = stringResource(R.string.dolby_help),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
                         }
                     }
                 },
@@ -480,6 +511,7 @@ private fun HomePage(
     onProfileSelected: (Int) -> Unit,
     onBassChange: (Boolean) -> Unit,
 ) {
+    val hapticView = LocalView.current
     Column(
         modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState())
             .padding(horizontal = 20.dp, vertical = 12.dp),
@@ -532,7 +564,13 @@ private fun HomePage(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
-                Switch(checked = enabled, onCheckedChange = onEnabledChange)
+                Switch(
+                    checked = enabled,
+                    onCheckedChange = { value ->
+                        hapticView.performDolbyToggleHaptic(value)
+                        onEnabledChange(value)
+                    },
+                )
             }
         }
         if (enabled) {
@@ -591,6 +629,7 @@ private fun HomePage(
 
 @Composable
 private fun ProfilePicker(profile: Int, onSelected: (Int) -> Unit) {
+    val hapticView = LocalView.current
     val entries = stringArrayResource(R.array.dolby_profile_entries)
     val values = stringArrayResource(R.array.dolby_profile_values)
     val ids = intArrayOf(
@@ -641,7 +680,10 @@ private fun ProfilePicker(profile: Int, onSelected: (Int) -> Unit) {
                         leadingIcon = { Icon(painterResource(ids[i]), null, tint = MaterialTheme.colorScheme.primary) },
                         onClick = {
                             expanded = false
-                            values.getOrNull(i)?.toIntOrNull()?.let(onSelected)
+                            values.getOrNull(i)?.toIntOrNull()?.let { selected ->
+                                hapticView.performDolbySelectionHaptic()
+                                onSelected(selected)
+                            }
                         },
                     )
                 }
@@ -679,34 +721,34 @@ private fun AdvancedPage(
             .padding(horizontal = 20.dp, vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
-        if (!enabled) {
-            InfoCard(stringResource(R.string.dolby_advanced_disabled))
-        } else {
-            if (profile == 0 && showDynamicGuide) {
-                Card(
-                    shape = MaterialTheme.shapes.extraLarge,
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.secondaryContainer,
-                    ),
+        if (profile == 0 && showDynamicGuide) {
+            Card(
+                shape = MaterialTheme.shapes.extraLarge,
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                ),
+            ) {
+                Column(
+                    Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 14.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
                 ) {
-                    Column(
-                        Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 14.dp),
-                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                    Text(
+                        stringResource(R.string.dolby_dynamic_controls_summary),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSecondaryContainer,
+                    )
+                    TextButton(
+                        onClick = onDismissDynamicGuide,
+                        modifier = Modifier.align(Alignment.End),
                     ) {
-                        Text(
-                            stringResource(R.string.dolby_dynamic_controls_summary),
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSecondaryContainer,
-                        )
-                        TextButton(
-                            onClick = onDismissDynamicGuide,
-                            modifier = Modifier.align(Alignment.End),
-                        ) {
-                            Text(stringResource(R.string.dolby_dynamic_controls_dismiss))
-                        }
+                        Text(stringResource(R.string.dolby_dynamic_controls_dismiss))
                     }
                 }
             }
+        }
+        if (!enabled) {
+            InfoCard(stringResource(R.string.dolby_advanced_disabled))
+        } else {
             val ieqEntries = stringArrayResource(R.array.dolby_ieq_entries)
             val ieqValues = stringArrayResource(R.array.dolby_ieq_values)
             ChoiceSetting(
@@ -789,6 +831,7 @@ private fun ChoiceSetting(
     values: Array<String>,
     onSelected: (Int) -> Unit,
 ) {
+    val hapticView = LocalView.current
     val index = values.indexOf(selected.toString()).coerceAtLeast(0)
     Card(shape = MaterialTheme.shapes.extraLarge,
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)) {
@@ -812,7 +855,10 @@ private fun ChoiceSetting(
                             modifier = Modifier.weight(1f).heightIn(min = 52.dp).selectable(
                                 selected = isSelected,
                                 role = Role.RadioButton,
-                                onClick = { onSelected(i) },
+                                onClick = {
+                                    hapticView.performDolbySelectionHaptic()
+                                    onSelected(i)
+                                },
                             ),
                             shape = MaterialTheme.shapes.large,
                             color = if (isSelected) MaterialTheme.colorScheme.secondaryContainer
@@ -846,12 +892,16 @@ private fun ChoiceSetting(
 
 @Composable
 private fun SwitchSetting(title: String, summary: String, checked: Boolean, onCheckedChange: (Boolean) -> Unit) {
+    val hapticView = LocalView.current
     Card(shape = MaterialTheme.shapes.extraLarge,
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)) {
         Row(Modifier.fillMaxWidth().heightIn(min = 86.dp).toggleable(
             value = checked,
             role = Role.Switch,
-            onValueChange = onCheckedChange,
+            onValueChange = { value ->
+                hapticView.performDolbyToggleHaptic(value)
+                onCheckedChange(value)
+            },
         )
             .padding(horizontal = 18.dp, vertical = 16.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -868,12 +918,16 @@ private fun SwitchSetting(title: String, summary: String, checked: Boolean, onCh
 
 @Composable
 private fun SwitchSettingRow(title: String, checked: Boolean, onCheckedChange: (Boolean) -> Unit) {
-    Row(Modifier.fillMaxWidth().toggleable(
+    val hapticView = LocalView.current
+    Row(Modifier.fillMaxWidth().heightIn(min = 88.dp).toggleable(
         value = checked,
         role = Role.Switch,
-        onValueChange = onCheckedChange,
+        onValueChange = { value ->
+            hapticView.performDolbyToggleHaptic(value)
+            onCheckedChange(value)
+        },
     )
-        .padding(horizontal = 10.dp, vertical = 7.dp),
+        .padding(horizontal = 18.dp, vertical = 16.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(16.dp)) {
         Text(title, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))

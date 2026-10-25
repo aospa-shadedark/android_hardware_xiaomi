@@ -71,9 +71,11 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import co.aospa.dolby.xiaomi.R
+import co.aospa.dolby.xiaomi.performDolbySelectionHaptic
 import co.aospa.dolby.xiaomi.geq.data.Preset
 import co.aospa.dolby.xiaomi.geq.data.PresetFileTransfer
 import kotlinx.coroutines.Dispatchers
@@ -96,6 +98,7 @@ fun PresetSelector(viewModel: EqualizerViewModel) {
     var pendingExport by remember { mutableStateOf<Preset?>(null) }
     var transferError by remember { mutableStateOf(false) }
     val context = LocalContext.current
+    val hapticView = LocalView.current
     val scope = rememberCoroutineScope()
     val importLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) scope.launch {
@@ -207,6 +210,7 @@ fun PresetSelector(viewModel: EqualizerViewModel) {
                         }
                     },
                     onClick = {
+                        hapticView.performDolbySelectionHaptic()
                         viewModel.setPreset(preset)
                         expanded = false
                     },
@@ -251,12 +255,6 @@ fun PresetSelector(viewModel: EqualizerViewModel) {
                             text = stringResource(R.string.dolby_geq_manage_presets),
                             style = MaterialTheme.typography.titleLarge,
                         )
-                        Spacer(Modifier.height(4.dp))
-                        Text(
-                            text = stringResource(R.string.dolby_geq_preset_help),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
                         Spacer(Modifier.height(16.dp))
                         Button(
                             modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
@@ -273,6 +271,12 @@ fun PresetSelector(viewModel: EqualizerViewModel) {
                                 pendingExport = currentPreset
                                 exportLauncher.launch("${currentPreset.name.orEmpty().replace(' ', '_')}.ldp")
                             },
+                        )
+                        Text(
+                            text = stringResource(R.string.dolby_geq_preset_help),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(top = 6.dp),
                         )
                         if (!currentPreset.isUserDefined) {
                             Text(
