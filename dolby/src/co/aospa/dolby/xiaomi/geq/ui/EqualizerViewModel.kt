@@ -39,6 +39,8 @@ class EqualizerViewModel(
     val preset = _preset.asStateFlow()
     private val _isLoading = MutableStateFlow(true)
     val isLoading = _isLoading.asStateFlow()
+    private val _hasLoadError = MutableStateFlow(false)
+    val hasLoadError = _hasLoadError.asStateFlow()
     val activeProfile = repository.activeProfileFlow
 
     private var currentProfile = repository.activeProfile
@@ -77,16 +79,38 @@ class EqualizerViewModel(
             ) { profile, revision, _ -> profile to revision }
                 .collectLatest { (profile, revision) ->
                     _isLoading.value = true
-                    // A quick return to a profile must see its last queued edit.
-                    val pendingEditsFinished = CompletableDeferred<Unit>()
-                    operations.send { pendingEditsFinished.complete(Unit) }
-                    pendingEditsFinished.await()
-                    val gains = repository.getBandGains(profile)
-                    if (profile == repository.activeProfile && revision == repository.settingsRevision) {
-                        currentProfile = profile
-                        loadedRevision = revision
-                        _preset.value = resolvePreset(gains)
-                        _isLoading.value = false
+                    _hasLoadError.value = false
+                    dlog(TAG, "Loading equalizer: profile=$profile revision=$revision")
+                    try {
+                        // A quick return to a profile must see its last queued edit.
+                        val pendingEditsFinished = CompletableDeferred<Unit>()
+                        operations.send { pendingEditsFinished.complete(Unit) }
+                        pendingEditsFinished.await()
+                        val gains = repository.getBandGains(profile)
+                        if (profile == repository.activeProfile && revision == repository.settingsRevision) {
+                            val previous = _preset.value.takeIf {
+                                profile == currentProfile && revision == loadedRevision
+                            }
+                            currentProfile = profile
+                            loadedRevision = revision
+                            _preset.value = resolvePreset(gains, previous)
+                            _isLoading.value = false
+                            dlog(TAG, "Loaded equalizer: profile=$profile preset=${_preset.value.name}")
+                        } else {
+                            // A profile switch or reset raced the read. Ask combine to load
+                            // the latest snapshot instead of leaving the page in Loading.
+                            refreshRequests.value++
+                        }
+                    } catch (exception: CancellationException) {
+                        throw exception
+                    } catch (exception: Exception) {
+                        Log.e(TAG, "Failed to load equalizer for profile $profile", exception)
+                        if (profile == repository.activeProfile && revision == repository.settingsRevision) {
+                            _hasLoadError.value = true
+                            _isLoading.value = false
+                        } else {
+                            refreshRequests.value++
+                        }
                     }
                 }
         }
@@ -96,10 +120,14 @@ class EqualizerViewModel(
         val named = _presets.value.find {
             it.name == previous?.name && it.isUserDefined == previous?.isUserDefined && it.bandGains == gains
         }
-        return named ?: _presets.value.find { it.bandGains == gains } ?: Preset(bandGains = gains)
+        // A reset should resolve to Flat even if a saved custom preset has the
+        // same zero gains. Preserve an explicitly selected custom preset above.
+        return named ?: repository.builtInPresets.find { it.bandGains == gains }
+            ?: _presets.value.find { it.bandGains == gains } ?: Preset(bandGains = gains)
     }
 
-    private fun canEdit() = !_isLoading.value && currentProfile == repository.activeProfile &&
+    private fun canEdit() = !_isLoading.value && !_hasLoadError.value &&
+        currentProfile == repository.activeProfile &&
         loadedRevision == repository.settingsRevision
 
     private fun applyPreset(preset: Preset) {
@@ -115,17 +143,14 @@ class EqualizerViewModel(
     }
 
     fun refresh() {
+        _hasLoadError.value = false
         _isLoading.value = true
         refreshRequests.value++
     }
 
     fun reset() {
         dlog(TAG, "reset()")
-        val current = _preset.value
-        applyPreset(
-            if (current.isUserDefined) current.copy(bandGains = repository.defaultPreset.bandGains)
-            else repository.defaultPreset,
-        )
+        applyPreset(repository.defaultPreset)
     }
 
     fun setPreset(preset: Preset) {

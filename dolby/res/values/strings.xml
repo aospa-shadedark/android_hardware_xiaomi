@@ -21,6 +21,12 @@
     <string name="dolby_profile_title">Choose a profile</string>
     <string name="dolby_profile_label">Profile</string>
     <string name="dolby_profile_change">Change</string>
+    <string name="dolby_profile_dynamic_summary">Dolby adjusts sound automatically.</string>
+    <string name="dolby_profile_video_summary">For films and other video.</string>
+    <string name="dolby_profile_music_summary">For music playback.</string>
+    <string name="dolby_profile_voice_summary">For speech and calls.</string>
+    <string name="dolby_profile_spatial_summary">For a wider, more immersive sound.</string>
+    <string name="dolby_profile_custom_summary">Your manually adjusted profile.</string>
     <string name="dolby_app_profiles">App profiles</string>
     <string name="dolby_app_profiles_card_summary">Assign sound profiles to apps.</string>
     <string name="dolby_app_profiles_summary">Assigned profiles apply while an app is active. Apps without an assignment use your Home profile.</string>
@@ -76,6 +82,8 @@
     <string name="dolby_eq_selected_band">Selected band: %1$s</string>
     <string name="dolby_eq_select_band">Select %1$s band</string>
     <string name="dolby_geq_add_preset_description">Save current equalizer as a preset</string>
+    <string name="dolby_eq_load_error">Couldn\'t load the equalizer.</string>
+    <string name="dolby_eq_retry">Try again</string>
     <string name="dolby_geq_save_new_preset">Save as new preset</string>
     <string name="dolby_geq_manage_presets">Manage presets</string>
     <string name="dolby_geq_preset_help">Imported presets with 10, 15, or 20 bands are adjusted to the controls shown here. Exports save the 10-band curve.</string>
@@ -121,8 +129,6 @@
     <string name="dolby_geq_rename_preset">Rename preset</string>
     <string name="dolby_geq_delete_preset">Delete preset</string>
     <string name="dolby_geq_delete_preset_prompt">Do you want to delete this preset?</string>
-    <string name="dolby_geq_reset_gains">Reset gains</string>
-    <string name="dolby_geq_reset_gains_prompt">Do you want to reset this preset to defaults?</string>
     <string name="dolby_geq_preset_name_exists">Preset name already exists!</string>
     <string name="dolby_geq_preset_name_empty">Enter a preset name.</string>
     <string name="dolby_geq_preset_name_too_long">Preset name is too long!</string>

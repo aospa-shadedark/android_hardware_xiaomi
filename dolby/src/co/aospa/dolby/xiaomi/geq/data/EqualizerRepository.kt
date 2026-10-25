@@ -27,12 +27,14 @@ class EqualizerRepository(
 
     // Preset is saved as a string of comma separated gains in SharedPreferences
     // and is unique to each profile ID
-    val activeProfile: Int get() = dolbyController.profile
+    // Use the same profile snapshot as Home and the refresh flow. Reading the
+    // native effect again can briefly return an older profile during a switch.
+    val activeProfile: Int get() = activeProfileFlow.value
     val activeProfileFlow get() = dolbyController.activeProfile
     val settingsRevisionFlow get() = dolbyController.settingsRevision
     val settingsRevision: Long get() = settingsRevisionFlow.value
 
-    private fun profileSharedPrefs(profile: Int = dolbyController.profile) =
+    private fun profileSharedPrefs(profile: Int = activeProfile) =
         context.getSharedPreferences(
             "profile_$profile",
             Context.MODE_PRIVATE
@@ -90,7 +92,7 @@ class EqualizerRepository(
         }
     }
 
-    suspend fun getBandGains(profile: Int = dolbyController.profile): List<BandGain> = withContext(Dispatchers.IO) {
+    suspend fun getBandGains(profile: Int = activeProfile): List<BandGain> = withContext(Dispatchers.IO) {
         synchronized(dolbyController.settingsLock) {
             val gains = profileSharedPrefs(profile).getString(PREF_PRESET, dolbyController.getPreset(profile))
             if (gains.isNullOrEmpty()) {
