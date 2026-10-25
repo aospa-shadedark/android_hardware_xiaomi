@@ -8,22 +8,30 @@ package co.aospa.dolby.xiaomi.geq.data
 
 import android.content.Context
 import android.content.SharedPreferences
+import android.net.Uri
 import android.util.Log
 import co.aospa.dolby.xiaomi.DolbyConstants.Companion.PREF_PRESET
 import co.aospa.dolby.xiaomi.DolbyConstants.Companion.dlog
 import co.aospa.dolby.xiaomi.DolbyController
 import co.aospa.dolby.xiaomi.R
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 class EqualizerRepository(
-    private val context: Context
+    context: Context
 ) {
 
-    private val dolbyController by lazy { DolbyController.getInstance(context) }
+    private val context = context.applicationContext
+
+    private val dolbyController by lazy { DolbyController.getInstance(this.context) }
 
     // Preset is saved as a string of comma separated gains in SharedPreferences
     // and is unique to each profile ID
@@ -35,23 +43,23 @@ class EqualizerRepository(
     val settingsRevision: Long get() = settingsRevisionFlow.value
 
     private fun profileSharedPrefs(profile: Int = activeProfile) =
-        context.getSharedPreferences(
+        this.context.getSharedPreferences(
             "profile_$profile",
             Context.MODE_PRIVATE
         )
 
     private val presetsSharedPrefs by lazy {
-        context.getSharedPreferences(
+        this.context.getSharedPreferences(
             "presets",
             Context.MODE_PRIVATE
         )
     }
 
     val builtInPresets: List<Preset> by lazy {
-        val names = context.resources.getStringArray(
+        val names = this.context.resources.getStringArray(
             R.array.dolby_preset_entries
         )
-        val presets = context.resources.getStringArray(
+        val presets = this.context.resources.getStringArray(
             R.array.dolby_preset_values
         )
         List(names.size) { index ->
@@ -94,7 +102,8 @@ class EqualizerRepository(
 
     suspend fun getBandGains(profile: Int = activeProfile): List<BandGain> = withContext(Dispatchers.IO) {
         synchronized(dolbyController.settingsLock) {
-            val gains = profileSharedPrefs(profile).getString(PREF_PRESET, dolbyController.getPreset(profile))
+            val gains = profileSharedPrefs(profile).getString(PREF_PRESET, null)
+                ?: dolbyController.getPreset(profile)
             if (gains.isNullOrEmpty()) {
                 defaultPreset.bandGains
             } else {
@@ -145,8 +154,51 @@ class EqualizerRepository(
             .apply()
     }
 
+    suspend fun readPreset(uri: Uri): Preset = withContext(Dispatchers.IO) {
+        PresetFileTransfer.read(context, uri)
+    }
+
+    suspend fun writePreset(uri: Uri, preset: Preset) = withContext(Dispatchers.IO) {
+        PresetFileTransfer.write(context, uri, preset)
+    }
+
+    fun enqueueExport(operation: suspend () -> Unit) {
+        // A document provider can be slow; exporting must not hold up EQ writes
+        // or the barrier used when a profile is loaded.
+        operationScope.launch { operation() }
+    }
+
+    /** Accepted writes outlive an activity, and reopening waits for those same writes. */
+    fun enqueueOperation(operation: suspend () -> Unit) {
+        synchronized(operationLock) {
+            val previous = lastOperation
+            val job = operationScope.launch(start = CoroutineStart.LAZY) {
+                previous?.join()
+                operation()
+            }
+            lastOperation = job
+            job.invokeOnCompletion {
+                synchronized(operationLock) {
+                    if (lastOperation === job) lastOperation = null
+                }
+            }
+            job.start()
+        }
+    }
+
+    suspend fun awaitPendingOperations() {
+        val pending = synchronized(operationLock) { lastOperation }
+        pending?.join()
+    }
+
     private companion object {
         const val TAG = "EqRepository"
+
+        // Only accepted operations run in this process scope. There is no idle
+        // worker, and the completed tail is released so it cannot retain a screen.
+        private val operationScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+        private val operationLock = Any()
+        private var lastOperation: Job? = null
 
         val tenBandFreqs = intArrayOf(
             32,

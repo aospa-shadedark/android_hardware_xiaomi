@@ -83,6 +83,7 @@
     <string name="dolby_eq_select_band">Select %1$s band</string>
     <string name="dolby_geq_add_preset_description">Save current equalizer as a preset</string>
     <string name="dolby_eq_load_error">Couldn\'t load the equalizer.</string>
+    <string name="dolby_eq_apply_error">Couldn\'t apply the equalizer. Try again.</string>
     <string name="dolby_settings_load_error">Couldn\'t load sound settings.</string>
     <string name="dolby_settings_apply_error">Couldn\'t apply the change. Try again.</string>
     <string name="dolby_eq_retry">Try again</string>
@@ -133,6 +134,7 @@
     <string name="dolby_geq_preset_name_exists">Preset name already exists!</string>
     <string name="dolby_geq_preset_name_empty">Enter a preset name.</string>
     <string name="dolby_geq_preset_name_too_long">Preset name is too long!</string>
+    <string name="dolby_geq_profile_not_ready">The sound profile is updating. Close this dialog and try again.</string>
 
     <!-- Dolby intelligent EQ -->
     <string name="dolby_ieq">Intelligent equalizer</string>
