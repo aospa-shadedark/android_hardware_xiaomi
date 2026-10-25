@@ -25,8 +25,10 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -67,6 +69,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.platform.LocalContext
@@ -74,6 +79,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import kotlin.math.abs
 import co.aospa.dolby.xiaomi.R
 import co.aospa.dolby.xiaomi.performDolbySelectionHaptic
 import co.aospa.dolby.xiaomi.geq.data.Preset
@@ -159,6 +165,22 @@ fun PresetSelector(viewModel: EqualizerViewModel) {
                 )
             }
             FilledTonalButton(
+                modifier = Modifier.height(56.dp).width(56.dp).align(Alignment.Bottom),
+                onClick = {
+                    hapticView.performDolbySelectionHaptic()
+                    expanded = false
+                    showNewPresetDialog = true
+                },
+                shape = MaterialTheme.shapes.large,
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                contentPadding = PaddingValues(0.dp),
+            ) {
+                Icon(
+                    Icons.Default.Add,
+                    contentDescription = stringResource(R.string.dolby_geq_add_preset_description),
+                )
+            }
+            FilledTonalButton(
                 modifier = Modifier.height(56.dp).widthIn(min = 104.dp).align(Alignment.Bottom),
                 onClick = {
                     if (currentPreset.isUserDefined) showResetConfirmDialog = true
@@ -203,11 +225,7 @@ fun PresetSelector(viewModel: EqualizerViewModel) {
                         ),
                     text = { Text(preset.name ?: stringResource(R.string.dolby_preset_custom)) },
                     leadingIcon = {
-                        if (isSelected) {
-                            Icon(Icons.Default.Check, contentDescription = null)
-                        } else {
-                            Spacer(Modifier.width(24.dp))
-                        }
+                        PresetLeadingIcon(preset, isSelected)
                     },
                     onClick = {
                         hapticView.performDolbySelectionHaptic()
@@ -217,14 +235,6 @@ fun PresetSelector(viewModel: EqualizerViewModel) {
                 )
             }
             HorizontalDivider()
-            DropdownMenuItem(
-                text = { Text(stringResource(R.string.dolby_geq_save_new_preset)) },
-                leadingIcon = { Icon(Icons.Default.Add, contentDescription = null) },
-                onClick = {
-                    expanded = false
-                    showNewPresetDialog = true
-                },
-            )
             DropdownMenuItem(
                 text = { Text(stringResource(R.string.dolby_geq_manage_presets)) },
                 leadingIcon = { Icon(Icons.Default.Edit, contentDescription = null) },
@@ -407,11 +417,7 @@ private fun PresetRow(
             { Text(stringResource(R.string.dolby_geq_custom_preset_hint)) }
         } else null,
         leadingContent = {
-            if (selected) {
-                Icon(Icons.Default.Check, contentDescription = stringResource(R.string.dolby_geq_active_preset))
-            } else {
-                Spacer(Modifier.width(24.dp))
-            }
+            PresetLeadingIcon(preset, selected)
         },
         trailingContent = if (preset.isUserDefined) {
             {
@@ -451,6 +457,86 @@ private fun PresetRow(
             )
             .clickable(onClick = onSelect),
     )
+}
+
+@Composable
+private fun PresetLeadingIcon(preset: Preset, selected: Boolean) {
+    if (preset.isUserDefined) {
+        PresetSignatureIcon(preset, selected)
+    } else {
+        Box(Modifier.width(36.dp).height(36.dp), contentAlignment = Alignment.Center) {
+            if (selected) {
+                Icon(
+                    Icons.Default.Check,
+                    contentDescription = stringResource(R.string.dolby_geq_active_preset),
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun PresetSignatureIcon(preset: Preset, selected: Boolean) {
+    val scheme = MaterialTheme.colorScheme
+    val tones = listOf(scheme.primaryContainer, scheme.secondaryContainer, scheme.tertiaryContainer)
+    val toneIndex = (preset.name.hashCode() and Int.MAX_VALUE) % tones.size
+    val background = tones[toneIndex]
+    val foreground = when (toneIndex) {
+        0 -> scheme.onPrimaryContainer
+        1 -> scheme.onSecondaryContainer
+        else -> scheme.onTertiaryContainer
+    }
+
+    Box(Modifier.width(40.dp).height(40.dp)) {
+        Box(
+            Modifier.fillMaxWidth().height(40.dp)
+                .clip(CircleShape)
+                .background(background),
+        ) {
+            Canvas(Modifier.fillMaxWidth().height(40.dp).padding(8.dp)) {
+                val values = preset.bandGains
+                val centerY = size.height / 2f
+                val slotWidth = size.width / 5f
+                val barWidth = slotWidth * 0.42f
+                val minimumHeight = 3.dp.toPx()
+                val maximumHeight = size.height * 0.44f
+                drawLine(
+                    color = foreground.copy(alpha = 0.35f),
+                    start = Offset(0f, centerY),
+                    end = Offset(size.width, centerY),
+                    strokeWidth = 1.dp.toPx(),
+                )
+                repeat(5) { index ->
+                    val valueIndex = if (values.size <= 1) 0
+                    else index * (values.size - 1) / 4
+                    val gain = values.getOrNull(valueIndex)?.gain?.coerceIn(-10, 10) ?: 0
+                    val barHeight = (abs(gain) / 10f * maximumHeight).coerceAtLeast(minimumHeight)
+                    val top = if (gain >= 0) centerY - barHeight else centerY
+                    drawRoundRect(
+                        color = foreground,
+                        topLeft = Offset(index * slotWidth + (slotWidth - barWidth) / 2f, top),
+                        size = Size(barWidth, barHeight),
+                        cornerRadius = CornerRadius(barWidth / 2f),
+                    )
+                }
+            }
+        }
+        if (selected) {
+            Surface(
+                modifier = Modifier.align(Alignment.BottomEnd).width(16.dp).height(16.dp),
+                shape = CircleShape,
+                color = scheme.primary,
+                contentColor = scheme.onPrimary,
+                border = BorderStroke(1.dp, scheme.surfaceContainerHigh),
+            ) {
+                Icon(
+                    Icons.Default.Check,
+                    contentDescription = stringResource(R.string.dolby_geq_active_preset),
+                    modifier = Modifier.padding(3.dp),
+                )
+            }
+        }
+    }
 }
 
 

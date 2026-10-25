@@ -75,6 +75,7 @@
     <string name="dolby_eq_band_gain">Gain for %1$s</string>
     <string name="dolby_eq_selected_band">Selected band: %1$s</string>
     <string name="dolby_eq_select_band">Select %1$s band</string>
+    <string name="dolby_geq_add_preset_description">Save current equalizer as a preset</string>
     <string name="dolby_geq_save_new_preset">Save as new preset</string>
     <string name="dolby_geq_manage_presets">Manage presets</string>
     <string name="dolby_geq_preset_help">Imported presets with 10, 15, or 20 bands are adjusted to the controls shown here. Exports save the 10-band curve.</string>
