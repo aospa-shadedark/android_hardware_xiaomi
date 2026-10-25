@@ -44,8 +44,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material.icons.Icons
@@ -53,6 +51,7 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -629,6 +628,7 @@ private fun HomePage(
 }
 
 @Composable
+@OptIn(ExperimentalMaterial3Api::class)
 private fun ProfilePicker(profile: Int, onSelected: (Int) -> Unit) {
     val hapticView = LocalView.current
     val entries = stringArrayResource(R.array.dolby_profile_entries)
@@ -641,13 +641,13 @@ private fun ProfilePicker(profile: Int, onSelected: (Int) -> Unit) {
         R.drawable.ic_dolby_profile_spatial,
         R.drawable.ic_dolby_profile_custom,
     )
-    val index = values.indexOf(profile.toString()).coerceAtLeast(0)
-    var expanded by remember { mutableStateOf(false) }
+    val index = values.indexOf(profile.toString()).takeIf { it >= 0 } ?: 0
+    var showProfiles by remember { mutableStateOf(false) }
     Card(shape = MaterialTheme.shapes.extraLarge,
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)) {
         Column(Modifier.fillMaxWidth()) {
             Surface(
-                onClick = { expanded = true },
+                onClick = { showProfiles = true },
                 shape = MaterialTheme.shapes.large,
                 color = MaterialTheme.colorScheme.surfaceContainerLow,
             ) {
@@ -674,20 +674,78 @@ private fun ProfilePicker(profile: Int, onSelected: (Int) -> Unit) {
                     }
                 }
             }
-            DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+        }
+    }
+    if (showProfiles) {
+        ModalBottomSheet(onDismissRequest = { showProfiles = false }) {
+            Column(
+                Modifier.fillMaxWidth().heightIn(max = 620.dp)
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 20.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Text(stringResource(R.string.dolby_profile_title), style = MaterialTheme.typography.titleLarge)
+                Spacer(Modifier.height(4.dp))
                 entries.forEachIndexed { i, label ->
-                    DropdownMenuItem(
-                        text = { Text(label) },
-                        leadingIcon = { Icon(painterResource(ids[i]), null, tint = MaterialTheme.colorScheme.primary) },
+                    val profileValue = values.getOrNull(i)?.toIntOrNull() ?: return@forEachIndexed
+                    val selected = profileValue == profile
+                    val description = when (profileValue) {
+                        0 -> R.string.dolby_profile_dynamic_summary
+                        1 -> R.string.dolby_profile_video_summary
+                        2 -> R.string.dolby_profile_music_summary
+                        8 -> R.string.dolby_profile_voice_summary
+                        4 -> R.string.dolby_profile_spatial_summary
+                        else -> R.string.dolby_profile_custom_summary
+                    }
+                    Surface(
                         onClick = {
-                            expanded = false
-                            values.getOrNull(i)?.toIntOrNull()?.let { selected ->
-                                hapticView.performDolbySelectionHaptic()
-                                onSelected(selected)
-                            }
+                            hapticView.performDolbySelectionHaptic()
+                            showProfiles = false
+                            onSelected(profileValue)
                         },
-                    )
+                        shape = MaterialTheme.shapes.large,
+                        color = if (selected) MaterialTheme.colorScheme.secondaryContainer
+                            else MaterialTheme.colorScheme.surfaceContainerLow,
+                        contentColor = if (selected) MaterialTheme.colorScheme.onSecondaryContainer
+                            else MaterialTheme.colorScheme.onSurface,
+                        border = BorderStroke(
+                            1.dp,
+                            if (selected) MaterialTheme.colorScheme.primary.copy(alpha = 0.42f)
+                            else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.48f),
+                        ),
+                    ) {
+                        Row(
+                            Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(14.dp),
+                        ) {
+                            Surface(
+                                shape = MaterialTheme.shapes.medium,
+                                color = if (selected) MaterialTheme.colorScheme.surface.copy(alpha = 0.65f)
+                                    else MaterialTheme.colorScheme.surfaceContainerHigh,
+                                contentColor = if (selected) MaterialTheme.colorScheme.onSecondaryContainer
+                                    else MaterialTheme.colorScheme.primary,
+                            ) {
+                                Icon(
+                                    painterResource(ids[i]),
+                                    contentDescription = null,
+                                    modifier = Modifier.padding(10.dp).height(24.dp).width(24.dp),
+                                )
+                            }
+                            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                Text(label, style = MaterialTheme.typography.titleMedium)
+                                Text(
+                                    stringResource(description),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = if (selected) MaterialTheme.colorScheme.onSecondaryContainer
+                                        else MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                            if (selected) Icon(Icons.Default.Check, contentDescription = null)
+                        }
+                    }
                 }
+                Spacer(Modifier.height(12.dp))
             }
         }
     }

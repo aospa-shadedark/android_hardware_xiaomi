@@ -16,6 +16,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -36,8 +37,24 @@ fun EqualizerScreen(
     modifier: Modifier = Modifier,
 ) {
     val isLoading by viewModel.isLoading.collectAsState()
+    val hasLoadError by viewModel.hasLoadError.collectAsState()
     Surface(modifier = modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-        if (enabled && isLoading) {
+        if (enabled && hasLoadError) {
+            Box(Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    Text(
+                        stringResource(R.string.dolby_eq_load_error),
+                        style = MaterialTheme.typography.bodyLarge,
+                    )
+                    Button(onClick = viewModel::refresh) {
+                        Text(stringResource(R.string.dolby_eq_retry))
+                    }
+                }
+            }
+        } else if (enabled && isLoading) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 CircularProgressIndicator()
             }

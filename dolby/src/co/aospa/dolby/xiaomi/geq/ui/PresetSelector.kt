@@ -99,7 +99,6 @@ fun PresetSelector(viewModel: EqualizerViewModel) {
     var showPresetManager by remember { mutableStateOf(false) }
     var presetToRename by remember { mutableStateOf<Preset?>(null) }
     var presetToDelete by remember { mutableStateOf<Preset?>(null) }
-    var showResetConfirmDialog by remember { mutableStateOf(false) }
     var importedPreset by remember { mutableStateOf<Preset?>(null) }
     var pendingExport by remember { mutableStateOf<Preset?>(null) }
     var transferError by remember { mutableStateOf(false) }
@@ -183,8 +182,7 @@ fun PresetSelector(viewModel: EqualizerViewModel) {
             FilledTonalButton(
                 modifier = Modifier.height(56.dp).widthIn(min = 104.dp).align(Alignment.Bottom),
                 onClick = {
-                    if (currentPreset.isUserDefined) showResetConfirmDialog = true
-                    else viewModel.reset()
+                    viewModel.reset()
                 },
                 shape = MaterialTheme.shapes.large,
                 border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
@@ -382,13 +380,6 @@ fun PresetSelector(viewModel: EqualizerViewModel) {
             onDismiss = { presetToDelete = null },
         )
     }
-    if (showResetConfirmDialog) {
-        ConfirmationDialog(
-            text = stringResource(R.string.dolby_geq_reset_gains_prompt),
-            onConfirm = { viewModel.reset() },
-            onDismiss = { showResetConfirmDialog = false },
-        )
-    }
 }
 
 @Composable
@@ -461,18 +452,7 @@ private fun PresetRow(
 
 @Composable
 private fun PresetLeadingIcon(preset: Preset, selected: Boolean) {
-    if (preset.isUserDefined) {
-        PresetSignatureIcon(preset, selected)
-    } else {
-        Box(Modifier.width(36.dp).height(36.dp), contentAlignment = Alignment.Center) {
-            if (selected) {
-                Icon(
-                    Icons.Default.Check,
-                    contentDescription = stringResource(R.string.dolby_geq_active_preset),
-                )
-            }
-        }
-    }
+    PresetSignatureIcon(preset, selected)
 }
 
 @Composable
@@ -509,8 +489,10 @@ private fun PresetSignatureIcon(preset: Preset, selected: Boolean) {
                 repeat(5) { index ->
                     val valueIndex = if (values.size <= 1) 0
                     else index * (values.size - 1) / 4
-                    val gain = values.getOrNull(valueIndex)?.gain?.coerceIn(-10, 10) ?: 0
-                    val barHeight = (abs(gain) / 10f * maximumHeight).coerceAtLeast(minimumHeight)
+                    // DAX stores tenths of a dB in -100..100; scale that full
+                    // range into the icon so different curves remain distinct.
+                    val gain = (values.getOrNull(valueIndex)?.gain ?: 0).coerceIn(-100, 100) / 100f
+                    val barHeight = (abs(gain) * maximumHeight).coerceAtLeast(minimumHeight)
                     val top = if (gain >= 0) centerY - barHeight else centerY
                     drawRoundRect(
                         color = foreground,
