@@ -476,6 +476,7 @@ private fun BottomBarItem(
             .selectable(
                 selected = active,
                 role = Role.Tab,
+                indication = null,
                 onClick = { onSelect(item) },
             )
             .fillMaxHeight()
