@@ -20,7 +20,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.offset
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.clickable
@@ -181,17 +180,19 @@ fun PresetSelector(viewModel: EqualizerViewModel) {
                 )
             }
             FilledTonalButton(
-                modifier = Modifier.height(56.dp).widthIn(min = 104.dp).align(Alignment.Bottom),
+                modifier = Modifier.height(56.dp).width(56.dp).align(Alignment.Bottom),
                 onClick = {
+                    hapticView.performDolbySelectionHaptic()
                     viewModel.reset()
                 },
                 shape = MaterialTheme.shapes.large,
                 border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-                contentPadding = PaddingValues(horizontal = 14.dp),
+                contentPadding = PaddingValues(0.dp),
             ) {
-                Icon(Icons.Default.Refresh, contentDescription = null)
-                Spacer(Modifier.width(6.dp))
-                Text(stringResource(R.string.dolby_reset_action))
+                Icon(
+                    Icons.Default.Refresh,
+                    contentDescription = stringResource(R.string.dolby_reset_action),
+                )
             }
         }
         ExposedDropdownMenu(
