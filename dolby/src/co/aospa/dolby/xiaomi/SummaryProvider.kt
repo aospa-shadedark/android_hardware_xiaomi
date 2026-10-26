@@ -12,10 +12,12 @@ import android.content.ContentValues
 import android.database.Cursor
 import android.net.Uri
 import android.os.Bundle
+import android.util.Log
 import co.aospa.dolby.xiaomi.R
 import com.android.settingslib.drawer.TileUtils.META_DATA_PREFERENCE_SUMMARY
 
 private const val KEY_DOLBY = "dolby"
+private const val TAG = "DolbySummary"
 
 /** Provide preference summary for injected items. */
 class SummaryProvider : ContentProvider() {
@@ -57,15 +59,22 @@ class SummaryProvider : ContentProvider() {
         selectionArgs: Array<String>?
     ): Int = 0
 
-    private fun getDolbySummary(): String {
-        val context = context!!
-        val dolbyController = DolbyController.getInstance(context)
-        if (!dolbyController.dsOn) {
-            return context.getString(R.string.dolby_off)
+    private fun getDolbySummary(): String? {
+        val context = context ?: return null
+        return try {
+            val dolbyController = DolbyController.getInstance(context)
+            if (!dolbyController.dsOn) {
+                context.getString(R.string.dolby_off)
+            } else {
+                dolbyController.getProfileName()?.let {
+                    context.getString(R.string.dolby_on_with_profile, it)
+                } ?: context.getString(R.string.dolby_on)
+            }
+        } catch (exception: RuntimeException) {
+            // Settings can query this provider while the native service is restarting.
+            Log.w(TAG, "Dolby summary temporarily unavailable", exception)
+            null
         }
-        return dolbyController.getProfileName()?.let {
-            context.getString(R.string.dolby_on_with_profile, it)
-        } ?: context.getString(R.string.dolby_on)
     }
 
 }

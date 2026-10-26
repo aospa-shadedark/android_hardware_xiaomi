@@ -41,6 +41,8 @@ class EqualizerRepository(
     val activeProfileFlow get() = dolbyController.activeProfile
     val settingsRevisionFlow get() = dolbyController.settingsRevision
     val settingsRevision: Long get() = settingsRevisionFlow.value
+    val effectGenerationFlow get() = dolbyController.effectGeneration
+    val effectGeneration: Long get() = effectGenerationFlow.value
 
     private fun profileSharedPrefs(profile: Int = activeProfile) =
         this.context.getSharedPreferences(

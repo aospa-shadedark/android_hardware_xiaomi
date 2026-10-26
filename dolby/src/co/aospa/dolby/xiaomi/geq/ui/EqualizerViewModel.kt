@@ -54,6 +54,7 @@ class EqualizerViewModel(
 
     private var currentProfile = repository.activeProfile
     private var loadedRevision = repository.settingsRevision
+    private var loadedEffectGeneration = repository.effectGeneration
     private var editGeneration = 0L
     private var cleared = false
     private var nextNameReservation = 0L
@@ -75,11 +76,14 @@ class EqualizerViewModel(
             combine(
                 repository.activeProfileFlow,
                 repository.settingsRevisionFlow,
+                repository.effectGenerationFlow,
                 refreshRequests,
-            ) { profile, revision, _ -> profile to revision }
-                .collectLatest { (profile, revision) ->
+            ) { profile, revision, effectGeneration, _ -> Triple(profile, revision, effectGeneration) }
+                .collectLatest { (profile, revision, effectGeneration) ->
                     val generation = editGeneration
-                    if (profile != currentProfile || revision != loadedRevision) {
+                    if (profile != currentProfile || revision != loadedRevision ||
+                        effectGeneration != loadedEffectGeneration
+                    ) {
                         _isLoading.value = true
                     }
                     _hasLoadError.value = false
@@ -88,7 +92,9 @@ class EqualizerViewModel(
                         // A quick return to a profile must see its last queued edit.
                         repository.awaitPendingOperations()
                         val gains = repository.getBandGains(profile)
-                        if (profile == repository.activeProfile && revision == repository.settingsRevision) {
+                        if (profile == repository.activeProfile && revision == repository.settingsRevision &&
+                            effectGeneration == repository.effectGeneration
+                        ) {
                             // A selection made during this read is already visible and
                             // queued for persistence. An older read must not replace it.
                             if (generation == editGeneration) {
@@ -97,12 +103,13 @@ class EqualizerViewModel(
                                 }
                                 currentProfile = profile
                                 loadedRevision = revision
+                                loadedEffectGeneration = effectGeneration
                                 _preset.value = resolvePreset(gains, previous)
                                 _isLoading.value = false
                                 dlog(TAG, "Loaded equalizer: profile=$profile preset=${_preset.value.name}")
                             }
                         } else {
-                            // A profile switch or reset raced the read. Ask combine to load
+                            // A profile switch, reset, or recovery raced the read. Load
                             // the latest snapshot instead of leaving the page in Loading.
                             refreshRequests.value++
                         }
@@ -111,10 +118,12 @@ class EqualizerViewModel(
                     } catch (exception: Exception) {
                         Log.e(TAG, "Failed to load equalizer for profile $profile", exception)
                         if (profile == repository.activeProfile && revision == repository.settingsRevision &&
-                            generation == editGeneration) {
+                            effectGeneration == repository.effectGeneration && generation == editGeneration) {
                             _hasLoadError.value = true
                             _isLoading.value = false
-                        } else if (profile != repository.activeProfile || revision != repository.settingsRevision) {
+                        } else if (profile != repository.activeProfile || revision != repository.settingsRevision ||
+                            effectGeneration != repository.effectGeneration
+                        ) {
                             refreshRequests.value++
                         }
                     }
@@ -134,7 +143,8 @@ class EqualizerViewModel(
 
     private fun canEdit() = !_isLoading.value && !_hasLoadError.value &&
         currentProfile == repository.activeProfile &&
-        loadedRevision == repository.settingsRevision
+        loadedRevision == repository.settingsRevision &&
+        loadedEffectGeneration == repository.effectGeneration
 
     private fun enqueueOperation(operation: suspend () -> Unit) {
         repository.enqueueOperation {
@@ -168,6 +178,7 @@ class EqualizerViewModel(
         editGeneration++
         currentProfile = profile
         loadedRevision = revision
+        loadedEffectGeneration = repository.effectGeneration
         _preset.value = preset
         _hasLoadError.value = false
         _isLoading.value = false
