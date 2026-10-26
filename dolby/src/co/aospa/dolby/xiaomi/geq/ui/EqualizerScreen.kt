@@ -35,12 +35,15 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import co.aospa.dolby.xiaomi.R
+import co.aospa.dolby.xiaomi.DolbyFirstUseHelp
+import co.aospa.dolby.xiaomi.DolbyHelpTopic
 
 @Composable
 fun EqualizerScreen(
     viewModel: EqualizerViewModel,
     enabled: Boolean = true,
     modifier: Modifier = Modifier,
+    isCurrentPage: Boolean = true,
 ) {
     val presetStateHolder = rememberSaveableStateHolder()
     // Keep result registrations alive while a profile refresh replaces the editor
@@ -61,6 +64,10 @@ fun EqualizerScreen(
             viewModel.dismissSaveError()
         }
     }
+    DolbyFirstUseHelp(
+        topic = DolbyHelpTopic.EQUALIZER,
+        isVisible = isCurrentPage && enabled && !isLoading && !hasLoadError,
+    )
     Surface(modifier = modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         if (enabled && hasLoadError) {
             Box(Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {

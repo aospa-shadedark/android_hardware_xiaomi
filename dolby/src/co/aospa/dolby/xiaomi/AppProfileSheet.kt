@@ -101,6 +101,12 @@ internal fun AppProfileSheet(context: Context, onDismiss: () -> Unit) {
         usageAccess -> stringResource(R.string.dolby_app_profiles_switch_off)
         else -> stringResource(R.string.dolby_app_profiles_access_required)
     }
+    val setupAccessSummary = stringResource(
+        if (usageAccess) R.string.dolby_app_profiles_setup_access_available
+        else R.string.dolby_app_profiles_setup_access_needed,
+    )
+    val setupSummary = stringResource(R.string.dolby_app_profiles_setup_summary) +
+        "\n\n" + setupAccessSummary
 
     LaunchedEffect(manager, usageAccess) {
         if (!usageAccess && manager.isEnabled) {
@@ -119,8 +125,8 @@ internal fun AppProfileSheet(context: Context, onDismiss: () -> Unit) {
     }
 
     fun updateAutomaticSwitching(checked: Boolean) {
+        hapticView.performDolbyToggleHaptic(checked)
         if (!checked) {
-            hapticView.performDolbyToggleHaptic(false)
             manager.setEnabled(false)
             DolbyAppProfileService.stop(context)
             monitoring = false
@@ -130,7 +136,6 @@ internal fun AppProfileSheet(context: Context, onDismiss: () -> Unit) {
         } else if (!manager.hasMonitoringConsent()) {
             showMonitoringConsent = true
         } else {
-            hapticView.performDolbyToggleHaptic(true)
             usageAccess = true
             manager.setEnabled(true)
             monitoring = true
@@ -147,20 +152,23 @@ internal fun AppProfileSheet(context: Context, onDismiss: () -> Unit) {
             item {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Row(
-                        Modifier.fillMaxWidth(),
+                        modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween,
                     ) {
                         Text(
                             stringResource(R.string.dolby_app_profiles),
                             modifier = Modifier.weight(1f),
                             style = MaterialTheme.typography.titleLarge,
                         )
-                        IconButton(onClick = { showSetupGuide = true }) {
+                        IconButton(onClick = {
+                            hapticView.performDolbySelectionHaptic()
+                            showSetupGuide = true
+                        }) {
                             Icon(
                                 Icons.Default.Info,
-                                contentDescription = stringResource(R.string.dolby_app_profiles_help),
+                                contentDescription = stringResource(R.string.dolby_app_profiles_help_action),
                                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(20.dp),
                             )
                         }
                     }
@@ -169,34 +177,6 @@ internal fun AppProfileSheet(context: Context, onDismiss: () -> Unit) {
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
-                    if (showSetupGuide) {
-                        Card(
-                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
-                            shape = MaterialTheme.shapes.extraLarge,
-                        ) {
-                            Column(
-                                Modifier.fillMaxWidth().padding(16.dp),
-                                verticalArrangement = Arrangement.spacedBy(8.dp),
-                            ) {
-                                Text(
-                                    stringResource(R.string.dolby_app_profiles_setup_title),
-                                    style = MaterialTheme.typography.titleSmall,
-                                    color = MaterialTheme.colorScheme.onSecondaryContainer,
-                                )
-                                Text(
-                                    stringResource(R.string.dolby_app_profiles_setup_summary),
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSecondaryContainer,
-                                )
-                                TextButton(onClick = {
-                                    manager.dismissSetupGuide()
-                                    showSetupGuide = false
-                                }) {
-                                    Text(stringResource(R.string.dolby_app_profiles_setup_dismiss))
-                                }
-                            }
-                        }
-                    }
                     Card(
                         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
                         shape = MaterialTheme.shapes.extraLarge,
@@ -277,6 +257,17 @@ internal fun AppProfileSheet(context: Context, onDismiss: () -> Unit) {
                 )
             }
         }
+    }
+
+    if (showSetupGuide) {
+        DolbyHelpDialog(
+            title = stringResource(R.string.dolby_app_profiles_setup_title),
+            message = setupSummary,
+            onDismiss = {
+                manager.dismissSetupGuide()
+                showSetupGuide = false
+            },
+        )
     }
 
     if (showMonitoringConsent) {
