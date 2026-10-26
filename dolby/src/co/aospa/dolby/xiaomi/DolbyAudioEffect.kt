@@ -11,16 +11,27 @@ import co.aospa.dolby.xiaomi.DolbyConstants.Companion.dlog
 import co.aospa.dolby.xiaomi.DolbyConstants.DsParam
 import java.util.UUID
 
-class DolbyAudioEffect(priority: Int, audioSession: Int) : AudioEffect(
-    EFFECT_TYPE_NULL, EFFECT_TYPE_DAP, priority, audioSession
+class DolbyAudioEffect(
+    priority: Int,
+    audioSession: Int,
+    val usesSoftwareDap: Boolean = false,
+) : AudioEffect(
+    EFFECT_TYPE_NULL,
+    if (usesSoftwareDap) EFFECT_TYPE_DAP_SOFTWARE else EFFECT_TYPE_DAP,
+    priority,
+    audioSession,
 ) {
 
     var dsOn: Boolean
         get() = getIntParam(EFFECT_PARAM_ENABLE) == 1
         set(value) {
             setIntParam(EFFECT_PARAM_ENABLE, if (value) 1 else 0)
-            enabled = value
+            setProcessingEnabled(value)
         }
+
+    fun setProcessingEnabled(value: Boolean) {
+        checkStatus(setEnabled(value))
+    }
 
     var profile: Int
         get() = getIntParam(EFFECT_PARAM_PROFILE)
@@ -88,6 +99,11 @@ class DolbyAudioEffect(priority: Int, audioSession: Int) : AudioEffect(
         private const val TAG = "DolbyAudioEffect"
         private val EFFECT_TYPE_DAP =
             UUID.fromString("9d4921da-8225-4f29-aefa-39537a04bcaa")
+        private val EFFECT_TYPE_DAP_SOFTWARE =
+            UUID.fromString("6ab06da4-c516-4611-8166-452799218539")
+
+        fun isSoftwareDapAvailable(): Boolean =
+            queryEffects()?.any { it.uuid == EFFECT_TYPE_DAP_SOFTWARE } == true
 
         private const val EFFECT_PARAM_ENABLE = 0
         private const val EFFECT_PARAM_CPDP_VALUES = 5

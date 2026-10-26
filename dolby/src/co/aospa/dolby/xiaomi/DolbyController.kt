@@ -47,6 +47,9 @@ internal class DolbyController private constructor(
         .map { it.toInt() }
     private val audioManager = context.getSystemService(AudioManager::class.java)!!
     private val handler = Handler(context.mainLooper)
+    private val routeMonitor = DolbyRouteMonitor(context) {
+        restoreCurrentProfileSafely()
+    }
     private val stereoWideningSupported =
         context.getResources().getBoolean(R.bool.dolby_stereo_widening_supported)
     private val volumeLevelerSupported =
@@ -97,11 +100,15 @@ internal class DolbyController private constructor(
                 audioManager.registerAudioPlaybackCallback(playbackCallback, handler)
                 try {
                     audioManager.registerAudioDeviceCallback(audioDeviceCallback, handler)
+                    routeMonitor.start()
                 } catch (exception: RuntimeException) {
+                    routeMonitor.stop()
+                    audioManager.unregisterAudioDeviceCallback(audioDeviceCallback)
                     audioManager.unregisterAudioPlaybackCallback(playbackCallback)
                     throw exception
                 }
             } else {
+                routeMonitor.stop()
                 audioManager.unregisterAudioPlaybackCallback(playbackCallback)
                 audioManager.unregisterAudioDeviceCallback(audioDeviceCallback)
             }
@@ -194,6 +201,10 @@ internal class DolbyController private constructor(
             // Only discard a rejected edit while this handle is still healthy;
             // binder/control loss must preserve saved settings for the next attempt.
             if (!hasControl(effect)) throw exception
+            if (effect.usesSoftwareDap) {
+                Log.w(TAG, "Software DAP rejected $key; keeping the saved hardware setting", exception)
+                return
+            }
             Log.w(TAG, "Removing rejected saved setting: $key", exception)
             prefs.edit().remove(key).apply()
         }
@@ -281,19 +292,29 @@ internal class DolbyController private constructor(
     }
 
     private fun checkEffect(): DolbyAudioEffect = synchronized(settingsLock) {
+        val useSoftwareDap = routeMonitor.useSoftwareDapForMedia() &&
+            DolbyAudioEffect.isSoftwareDapAvailable()
         val previous = dolbyEffect
-        if (previous != null && hasControl(previous)) return@synchronized previous
+        if (previous != null && previous.usesSoftwareDap == useSoftwareDap && hasControl(previous)) {
+            return@synchronized previous
+        }
         if (SystemClock.uptimeMillis() < recoveryRetryAt) {
             throw IllegalStateException("Dolby effect recovery is pending", lastRecoveryFailure)
         }
 
-        Log.w(TAG, "connecting Dolby effect")
-        // Keep the old initialized handle until construction and restoration succeed.
-        // A failed connection can then be retried instead of retaining a released handle.
-        val replacement = DolbyAudioEffect(EFFECT_PRIORITY, audioSession = 0)
+        Log.w(TAG, "connecting Dolby effect: software=$useSoftwareDap")
+        val previousEnabled = previous?.let { runCatching { it.enabled }.getOrDefault(false) } ?: false
         val power = readSavedPower()
         val selectedProfile = desiredProfile()
+        var pending: DolbyAudioEffect? = null
+        val replacement: DolbyAudioEffect
         try {
+            // Disable only this handle; dsOn also changes Dolby's shared master setting.
+            if (previous != null && hasControl(previous)) previous.setProcessingEnabled(false)
+            replacement = DolbyAudioEffect(
+                EFFECT_PRIORITY, audioSession = 0, usesSoftwareDap = useSoftwareDap
+            )
+            pending = replacement
             profileIds.forEach { profile ->
                 if (startupResetPending) replacement.resetProfileSpecificSettings(profile)
                 restoreSettings(replacement, profile)
@@ -301,7 +322,13 @@ internal class DolbyController private constructor(
             replacement.dsOn = power
             replacement.profile = selectedProfile
         } catch (exception: RuntimeException) {
-            runCatching { replacement.release() }
+            pending?.let { runCatching { it.release() } }
+            if (previous != null && hasControl(previous)) {
+                runCatching { previous.setProcessingEnabled(previousEnabled) }
+            }
+            // A healthy old handle can still be on the wrong backend after a failed switch.
+            lastRecoveryFailure = exception
+            scheduleProfileRestore()
             throw exception
         }
 
@@ -370,7 +397,13 @@ internal class DolbyController private constructor(
 
     private fun setPower(value: Boolean, persist: Boolean) {
         synchronized(settingsLock) {
-            withEffect { it.dsOn = value }
+            val current = dolbyEffect
+            if (!value && current != null && hasControl(current)) {
+                // A failed route switch must not prevent disabling the retained engine.
+                current.dsOn = false
+            } else {
+                withEffect { it.dsOn = value }
+            }
             _enabled.value = value
             if (persist) {
                 defaultPrefs.edit().putBoolean(DolbyConstants.PREF_ENABLE, value).apply()
@@ -379,7 +412,7 @@ internal class DolbyController private constructor(
             // its preference or prevent callers from updating the monitor lifecycle.
             try {
                 registerCallbacks = value
-                if (value) setCurrentProfile()
+                if (value) setCurrentProfile() else clearRecoveryRetry()
             } catch (exception: RuntimeException) {
                 Log.w(TAG, "Power applied; profile restoration will retry", exception)
                 scheduleProfileRestore()
