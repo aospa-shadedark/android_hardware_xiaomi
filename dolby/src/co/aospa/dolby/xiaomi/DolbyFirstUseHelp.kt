@@ -27,7 +27,7 @@ internal enum class DolbyHelpTopic(
     val title: Int,
     val message: Int,
 ) {
-    EQUALIZER("equalizer_v2", R.string.dolby_eq_help_title, R.string.dolby_eq_help_message),
+    EQUALIZER("equalizer_v3", R.string.dolby_eq_help_title, R.string.dolby_eq_help_message),
     ADVANCED("advanced_v3", R.string.dolby_advanced_help_title, R.string.dolby_advanced_help_message),
 }
 

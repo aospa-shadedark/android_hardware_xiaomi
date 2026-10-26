@@ -40,6 +40,7 @@ import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.FileUpload
 import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.DropdownMenu
@@ -82,6 +83,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import co.aospa.dolby.xiaomi.R
+import co.aospa.dolby.xiaomi.DolbyHelpDialog
 import co.aospa.dolby.xiaomi.performDolbySelectionHaptic
 import co.aospa.dolby.xiaomi.geq.data.Preset
 
@@ -97,6 +99,7 @@ fun PresetSelector(
     var expanded by remember { mutableStateOf(false) }
     var showNewPresetDialog by rememberSaveable { mutableStateOf(false) }
     var showPresetManager by rememberSaveable { mutableStateOf(false) }
+    var showPresetHelp by rememberSaveable { mutableStateOf(false) }
     var presetToRenameName by rememberSaveable { mutableStateOf<String?>(null) }
     var presetToDeleteName by rememberSaveable { mutableStateOf<String?>(null) }
     val importedPreset by viewModel.importedPreset.collectAsState()
@@ -285,12 +288,6 @@ fun PresetSelector(
                             onImport = onImport,
                             onExport = onExport,
                         )
-                        Text(
-                            text = stringResource(R.string.dolby_geq_preset_help),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(top = 6.dp),
-                        )
                         if (!currentPreset.isUserDefined) {
                             Text(
                                 text = stringResource(R.string.dolby_geq_export_hint),
@@ -345,6 +342,13 @@ fun PresetSelector(
                 }
             }
         }
+    }
+    if (showPresetHelp) {
+        DolbyHelpDialog(
+            title = stringResource(R.string.dolby_geq_preset_help_title),
+            message = stringResource(R.string.dolby_geq_preset_help),
+            onDismiss = { showPresetHelp = false },
+        )
     }
     presets.firstOrNull { it.isUserDefined && it.name == presetToRenameName }?.let { target ->
         PresetNameDialog(

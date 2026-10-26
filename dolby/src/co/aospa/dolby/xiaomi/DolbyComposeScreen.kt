@@ -130,6 +130,7 @@ import co.aospa.dolby.xiaomi.DolbyConstants.Companion.PREF_SPK_VIRTUALIZER
 import co.aospa.dolby.xiaomi.DolbyConstants.Companion.PREF_STEREO_WIDENING
 import co.aospa.dolby.xiaomi.DolbyConstants.Companion.PREF_VOLUME
 import co.aospa.dolby.xiaomi.geq.ui.EqualizerScreen
+import co.aospa.dolby.xiaomi.geq.ui.EqualizerModeControl
 import co.aospa.dolby.xiaomi.geq.ui.EqualizerViewModel
 import co.aospa.dolby.xiaomi.preference.DolbyPreferenceStore
 
@@ -254,6 +255,9 @@ internal fun DolbyComposeScreen(
                     containerColor = MaterialTheme.colorScheme.background,
                 ),
                 actions = {
+                    if (destination == DolbyDestination.EQUALIZER) {
+                        EqualizerModeControl(equalizerViewModel, enabled = enabled)
+                    }
                     if (destination == DolbyDestination.HOME) {
                         Surface(
                             shape = CircleShape,
@@ -325,6 +329,7 @@ internal fun DolbyComposeScreen(
                             enabled = enabled,
                             modifier = Modifier.fillMaxSize(),
                             isCurrentPage = !pagerState.isScrollInProgress && pagerState.settledPage == pageIndex,
+                            showModeControl = false,
                         )
                         DolbyDestination.ADVANCED -> AdvancedPage(
                             context = context,
