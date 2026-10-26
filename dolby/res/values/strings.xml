@@ -12,7 +12,11 @@
     <string name="dolby_powered_off_summary">Audio enhancement is off</string>
     <string name="dolby_disabled_summary">Turn on Dolby Atmos to adjust settings.</string>
     <string name="dolby_bass_summary">Boost low frequencies for the selected profile.</string>
-    <string name="dolby_advanced_shared_summary">Changes here apply to every profile.</string>
+    <string name="dolby_advanced_profile_summary">Changes are saved to %1$s.</string>
+    <string name="dolby_advanced_tune_profile">Tune profile</string>
+    <string name="dolby_advanced_choose_profile">Tune a profile</string>
+    <string name="dolby_advanced_picker_summary">Select the profile whose Advanced settings you want to edit. This does not change the profile in use.</string>
+    <string name="dolby_advanced_help_action">Advanced settings help</string>
     <string name="dolby_advanced_reset_note">Reset profiles on Home restores the original Dolby tuning.</string>
     <string name="dolby_advanced_disabled">Turn on Dolby Atmos to adjust advanced settings.</string>
     <string name="dolby_help_got_it">Got it</string>
@@ -22,8 +26,8 @@
     <string name="dolby_eq_pro_active">Pro mode</string>
     <string name="dolby_eq_normal_mode">Normal mode</string>
     <string name="dolby_eq_pro_scroll">Swipe the graph to see all bands.</string>
-    <string name="dolby_advanced_help_title">Before you adjust</string>
-    <string name="dolby_advanced_help_message">Changes here apply to every profile.\n\nFor Dynamic, we recommend keeping the default settings. You can restore them with Reset profiles on Home.</string>
+    <string name="dolby_advanced_help_title">Tune each profile</string>
+    <string name="dolby_advanced_help_message">Advanced opens on your Home profile (Dynamic by default). Use Tune profile to edit another profile without switching playback. Apps assigned to a profile use its saved tuning.\n\nDynamic is tuned by Dolby. Leave it at its defaults for the intended Dynamic sound. Reset profiles on Home restores device defaults.</string>
     <string name="dolby_profile_context">%1$s profile</string>
     <string name="dolby_profile_title">Choose a profile</string>
     <string name="dolby_profile_picker_summary">Choose the Dolby tuning that suits what you’re listening to.</string>
@@ -41,7 +45,7 @@
     <string name="dolby_app_profiles_card_summary">Assign sound profiles to apps.</string>
     <string name="dolby_app_profiles_summary">Assigned profiles apply while an app is active. Apps without an assignment use your Home profile.</string>
     <string name="dolby_app_profiles_setup_title">Set up app profiles</string>
-    <string name="dolby_app_profiles_setup_summary">Choose a profile for an app, then turn on Automatic switching. Apps set to Use default follow Home.\n\nApps assigned to the same profile share its EQ and Bass settings. Changes in Advanced apply to every profile.</string>
+    <string name="dolby_app_profiles_setup_summary">Choose a profile for each app. Turn on Automatic switching to apply it while that app is open. Use default follows Home.\n\nEach profile keeps its own equalizer, Bass enhancer and Advanced settings. Use Tune profile in Advanced to edit them.</string>
     <string name="dolby_app_profiles_help_action">App profiles help</string>
     <string name="dolby_app_profiles_setup_dismiss">Got it</string>
     <string name="dolby_app_profiles_setup_access_title">Allow Usage Access</string>

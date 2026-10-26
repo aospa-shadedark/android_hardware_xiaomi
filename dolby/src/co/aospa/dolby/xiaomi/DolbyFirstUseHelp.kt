@@ -28,7 +28,7 @@ internal enum class DolbyHelpTopic(
     val message: Int,
 ) {
     EQUALIZER("equalizer_v3", R.string.dolby_eq_help_title, R.string.dolby_eq_help_message),
-    ADVANCED("advanced_v3", R.string.dolby_advanced_help_title, R.string.dolby_advanced_help_message),
+    ADVANCED("advanced_v5", R.string.dolby_advanced_help_title, R.string.dolby_advanced_help_message),
 }
 
 /** Guidance is acknowledged separately from audio settings and survives profile resets. */
