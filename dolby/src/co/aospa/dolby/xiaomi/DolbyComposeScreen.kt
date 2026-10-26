@@ -98,6 +98,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.LayoutDirection
@@ -1215,7 +1216,10 @@ private fun StrengthSettingContent(
             valueRange = range, enabled = enabled,
             steps = (range.endInclusive - range.start).roundToInt().minus(1).coerceAtLeast(0),
             modifier = Modifier.fillMaxWidth().padding(horizontal = 6.dp)
-                .semantics { contentDescription = title },
+                .semantics {
+                    contentDescription = title
+                    stateDescription = displayedValue.toString()
+                },
             onValueChangeFinished = { onFinished(displayedValue) })
     }
 }

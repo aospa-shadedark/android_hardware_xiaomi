@@ -10,12 +10,16 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
@@ -32,9 +36,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.res.stringResource
@@ -45,6 +53,7 @@ import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import co.aospa.dolby.xiaomi.R
@@ -67,7 +76,7 @@ fun EqualizerBands(viewModel: EqualizerViewModel) {
     }
     val primary = MaterialTheme.colorScheme.primary
     val outline = MaterialTheme.colorScheme.outlineVariant
-    val surface = MaterialTheme.colorScheme.surfaceContainerHighest
+    val surface = MaterialTheme.colorScheme.surfaceContainerLow
     val responseDescription = stringResource(R.string.dolby_eq_curve_description)
     val gainDescription = stringResource(R.string.dolby_eq_band_gain, formatFrequency(selectedBand.band))
     val selectedBandDescription = stringResource(R.string.dolby_eq_selected_band, formatFrequency(selectedBand.band))
@@ -143,12 +152,12 @@ fun EqualizerBands(viewModel: EqualizerViewModel) {
                     .height(166.dp)
                     .semantics {
                         contentDescription = responseDescription
-                        stateDescription = selectedBandDescription
+                        stateDescription = "$selectedBandDescription, ${formatGain(sliderPosition)}"
                         customActions = bandActions
                     }
                     .pointerInput(bandGains) {
                         detectTapGestures { tap ->
-                            val edge = 12.dp.toPx()
+                            val edge = 14.dp.toPx()
                             val plotWidth = (size.width - edge * 2).coerceAtLeast(1f)
                             val position = ((tap.x - edge) / plotWidth).coerceIn(0f, 1f)
                             val index = (position * (bandGains.size - 1)).roundToInt()
@@ -158,28 +167,30 @@ fun EqualizerBands(viewModel: EqualizerViewModel) {
                         }
                     },
             ) {
-                val edge = 12.dp.toPx()
-                val top = 10.dp.toPx()
-                val bottom = size.height - 10.dp.toPx()
+                val edge = 14.dp.toPx()
+                val top = 14.dp.toPx()
+                val bottom = size.height - 14.dp.toPx()
                 val plotWidth = size.width - edge * 2
                 val plotHeight = bottom - top
                 val centerY = top + plotHeight / 2f
-                val halfRange = plotHeight * .46f
+                val halfRange = plotHeight / 2f
                 val xStep = plotWidth / (bandGains.size - 1).coerceAtLeast(1)
-                val grid = outline.copy(alpha = .65f)
-
-                listOf(-1f, 0f, 1f).forEach { tick ->
-                    val y = centerY - tick * halfRange
-                    drawLine(
-                        color = if (tick == 0f) outline else grid,
-                        start = Offset(edge, y),
-                        end = Offset(size.width - edge, y),
-                        strokeWidth = if (tick == 0f) 1.5.dp.toPx() else 1.dp.toPx(),
-                    )
-                }
-                bandGains.indices.forEach { index ->
+                val grid = outline.copy(alpha = .38f)
+                drawRect(
+                    color = outline.copy(alpha = .65f),
+                    topLeft = Offset(edge, top),
+                    size = Size(plotWidth, plotHeight),
+                    style = Stroke(width = 1.dp.toPx()),
+                )
+                drawLine(
+                    color = outline.copy(alpha = .85f),
+                    start = Offset(edge, centerY),
+                    end = Offset(size.width - edge, centerY),
+                    strokeWidth = 1.25.dp.toPx(),
+                )
+                (1 until bandGains.lastIndex).forEach { index ->
                     val x = edge + index * xStep
-                    drawLine(grid.copy(alpha = .35f), Offset(x, top), Offset(x, bottom), 1.dp.toPx())
+                    drawLine(grid, Offset(x, top), Offset(x, bottom), 1.dp.toPx())
                 }
 
                 val points = responseGains.mapIndexed { index, gain ->
@@ -209,71 +220,85 @@ fun EqualizerBands(viewModel: EqualizerViewModel) {
                 drawPath(
                     fill,
                     brush = Brush.verticalGradient(
-                        colors = listOf(primary.copy(alpha = .24f), primary.copy(alpha = .015f)),
+                        colors = listOf(primary.copy(alpha = .20f), primary.copy(alpha = .015f)),
                         startY = top,
                         endY = bottom,
                     ),
                 )
-                drawPath(curve, color = primary, style = Stroke(width = 3.dp.toPx()))
+                drawPath(
+                    curve,
+                    color = primary,
+                    style = Stroke(width = 2.8.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round),
+                )
                 points.forEachIndexed { index, point ->
                     if (index == selected) {
-                        drawCircle(primary.copy(alpha = .18f), 13.dp.toPx(), point)
-                        drawCircle(primary, 6.dp.toPx(), point)
-                        drawCircle(surface, 3.8.dp.toPx(), point)
+                        drawCircle(primary.copy(alpha = .12f), 13.dp.toPx(), point)
+                        drawCircle(surface, 6.dp.toPx(), point)
+                        drawCircle(primary, 6.dp.toPx(), point, style = Stroke(width = 2.2.dp.toPx()))
                     } else {
                         drawCircle(surface, 3.5.dp.toPx(), point)
                         drawCircle(
                             primary,
                             3.5.dp.toPx(),
                             point,
-                            style = Stroke(width = 2.dp.toPx()),
+                            style = Stroke(width = 1.8.dp.toPx()),
                         )
                     }
                 }
             }
 
-            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                bandGains.chunked(5).forEachIndexed { rowIndex, rowBands ->
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    ) {
-                        rowBands.forEachIndexed { columnIndex, band ->
-                            val index = rowIndex * 5 + columnIndex
-                            val isSelected = index == selected
-                            Surface(
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .height(34.dp)
-                                    .selectable(selected = isSelected, role = Role.RadioButton) {
-                                        if (index != selected) hapticView.performDolbySelectionHaptic()
-                                        selected = index
-                                        sliderPosition = band.gain / 100f
+            BoxWithConstraints(Modifier.fillMaxWidth().selectableGroup()) {
+                val fontScale = LocalDensity.current.fontScale.coerceAtLeast(1f)
+                val columns = ((maxWidth + 6.dp) / (52.dp * fontScale + 6.dp))
+                    .toInt().coerceIn(1, 5)
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    bandGains.chunked(columns).forEachIndexed { rowIndex, rowBands ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        ) {
+                            rowBands.forEachIndexed { columnIndex, band ->
+                                val index = rowIndex * columns + columnIndex
+                                val isSelected = index == selected
+                                Surface(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .heightIn(min = 48.dp)
+                                        .selectable(selected = isSelected, role = Role.RadioButton) {
+                                            if (index != selected) hapticView.performDolbySelectionHaptic()
+                                            selected = index
+                                            sliderPosition = band.gain / 100f
+                                        },
+                                    shape = MaterialTheme.shapes.small,
+                                    color = if (isSelected) {
+                                        MaterialTheme.colorScheme.primaryContainer
+                                    } else {
+                                        MaterialTheme.colorScheme.surfaceContainerHighest
                                     },
-                                shape = MaterialTheme.shapes.small,
-                                color = if (isSelected) {
-                                    MaterialTheme.colorScheme.primaryContainer
-                                } else {
-                                    MaterialTheme.colorScheme.surfaceContainerHighest
-                                },
-                                contentColor = if (isSelected) {
-                                    MaterialTheme.colorScheme.onPrimaryContainer
-                                } else {
-                                    MaterialTheme.colorScheme.onSurfaceVariant
-                                },
-                                border = if (isSelected) null else BorderStroke(
-                                    1.dp,
-                                    outline.copy(alpha = .55f),
-                                ),
-                            ) {
-                                Text(
-                                    text = formatFrequency(band.band),
-                                    modifier = Modifier.fillMaxWidth().padding(horizontal = 2.dp, vertical = 8.dp),
-                                    style = MaterialTheme.typography.labelSmall,
-                                    fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Medium,
-                                    textAlign = TextAlign.Center,
-                                    maxLines = 1,
-                                )
+                                    contentColor = if (isSelected) {
+                                        MaterialTheme.colorScheme.onPrimaryContainer
+                                    } else {
+                                        MaterialTheme.colorScheme.onSurfaceVariant
+                                    },
+                                    border = if (isSelected) null else BorderStroke(
+                                        1.dp,
+                                        outline.copy(alpha = .55f),
+                                    ),
+                                ) {
+                                    Box(
+                                        Modifier.fillMaxWidth().padding(horizontal = 2.dp, vertical = 8.dp),
+                                        contentAlignment = Alignment.Center,
+                                    ) {
+                                        Text(
+                                            text = formatFrequency(band.band),
+                                            style = MaterialTheme.typography.labelSmall,
+                                            fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Medium,
+                                            textAlign = TextAlign.Center,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                        )
+                                    }
+                                }
                             }
                         }
                     }
@@ -289,6 +314,7 @@ fun EqualizerBands(viewModel: EqualizerViewModel) {
                 valueRange = -1f..1f,
                 modifier = Modifier.fillMaxWidth().semantics {
                     contentDescription = gainDescription
+                    stateDescription = formatGain(sliderPosition)
                 },
             )
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
