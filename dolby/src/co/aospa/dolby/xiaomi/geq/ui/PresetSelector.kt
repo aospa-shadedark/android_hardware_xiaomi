@@ -21,12 +21,13 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -77,6 +78,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import co.aospa.dolby.xiaomi.R
@@ -100,6 +102,11 @@ fun PresetSelector(
     val importedPreset by viewModel.importedPreset.collectAsState()
     val transferError by viewModel.transferError.collectAsState()
     val hapticView = LocalView.current
+    val typography = MaterialTheme.typography
+    val density = LocalDensity.current
+    val controlHeight = (with(density) { typography.bodyLarge.lineHeight.toDp() } + 32.dp)
+        .coerceAtLeast(56.dp)
+    val labelInset = with(density) { typography.labelSmall.lineHeight.toDp() } / 2 + 2.dp
 
     ExposedDropdownMenuBox(
         expanded = expanded,
@@ -111,9 +118,9 @@ fun PresetSelector(
             horizontalArrangement = Arrangement.spacedBy(10.dp),
             verticalAlignment = Alignment.Bottom,
         ) {
-            Box(Modifier.weight(1f).height(64.dp)) {
+            Box(Modifier.weight(1f).height(controlHeight + labelInset)) {
                 Surface(
-                    modifier = Modifier.fillMaxWidth().height(56.dp)
+                    modifier = Modifier.fillMaxWidth().height(controlHeight)
                         .align(Alignment.BottomCenter)
                         .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable, enabled = true),
                     shape = MaterialTheme.shapes.large,
@@ -145,7 +152,7 @@ fun PresetSelector(
                 )
             }
             FilledTonalButton(
-                modifier = Modifier.height(56.dp).width(48.dp).align(Alignment.Bottom),
+                modifier = Modifier.height(controlHeight).width(48.dp).align(Alignment.Bottom),
                 onClick = {
                     hapticView.performDolbySelectionHaptic()
                     viewModel.reset()
@@ -161,7 +168,7 @@ fun PresetSelector(
                 )
             }
             FilledTonalButton(
-                modifier = Modifier.height(56.dp).width(48.dp).align(Alignment.Bottom),
+                modifier = Modifier.height(controlHeight).width(48.dp).align(Alignment.Bottom),
                 onClick = {
                     hapticView.performDolbySelectionHaptic()
                     expanded = false
@@ -238,7 +245,7 @@ fun PresetSelector(
     if (showPresetManager) {
         ModalBottomSheet(onDismissRequest = { showPresetManager = false }) {
             LazyColumn(
-                modifier = Modifier.fillMaxWidth().fillMaxHeight(0.82f),
+                modifier = Modifier.fillMaxWidth().fillMaxHeight(0.82f).selectableGroup(),
                 contentPadding = PaddingValues(start = 20.dp, end = 20.dp, bottom = 24.dp),
             ) {
                 item {
@@ -372,6 +379,7 @@ private fun PresetRow(
     onDelete: (() -> Unit)? = null,
 ) {
     var actionsExpanded by remember(preset) { mutableStateOf(false) }
+    val hapticView = LocalView.current
     ListItem(
         colors = ListItemDefaults.colors(
             containerColor = if (selected) MaterialTheme.colorScheme.secondaryContainer else Color.Transparent,
@@ -394,7 +402,10 @@ private fun PresetRow(
         trailingContent = if (preset.isUserDefined) {
             {
                 Box {
-                    IconButton(onClick = { actionsExpanded = true }) {
+                    IconButton(onClick = {
+                        hapticView.performDolbySelectionHaptic()
+                        actionsExpanded = true
+                    }) {
                         Icon(
                             Icons.Default.MoreVert,
                             contentDescription = stringResource(R.string.dolby_geq_preset_actions),
@@ -402,16 +413,41 @@ private fun PresetRow(
                                 else MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
-                    DropdownMenu(expanded = actionsExpanded, onDismissRequest = { actionsExpanded = false }) {
+                    DropdownMenu(
+                        expanded = actionsExpanded,
+                        onDismissRequest = { actionsExpanded = false },
+                        modifier = Modifier.width(208.dp),
+                        shape = MaterialTheme.shapes.large,
+                        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                        tonalElevation = 3.dp,
+                        shadowElevation = 3.dp,
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                    ) {
                         DropdownMenuItem(
                             text = { Text(stringResource(R.string.dolby_geq_rename_preset)) },
                             leadingIcon = { Icon(Icons.Default.Edit, contentDescription = null) },
-                            onClick = { actionsExpanded = false; onRename?.invoke() },
+                            onClick = {
+                                hapticView.performDolbySelectionHaptic()
+                                actionsExpanded = false
+                                onRename?.invoke()
+                            },
+                        )
+                        HorizontalDivider(
+                            Modifier.padding(horizontal = 12.dp),
+                            color = MaterialTheme.colorScheme.outlineVariant,
                         )
                         DropdownMenuItem(
                             text = { Text(stringResource(R.string.dolby_geq_delete_preset)) },
                             leadingIcon = { Icon(Icons.Default.Delete, contentDescription = null) },
-                            onClick = { actionsExpanded = false; onDelete?.invoke() },
+                            colors = MenuDefaults.itemColors(
+                                textColor = MaterialTheme.colorScheme.error,
+                                leadingIconColor = MaterialTheme.colorScheme.error,
+                            ),
+                            onClick = {
+                                hapticView.performDolbySelectionHaptic()
+                                actionsExpanded = false
+                                onDelete?.invoke()
+                            },
                         )
                     }
                 }
@@ -427,7 +463,7 @@ private fun PresetRow(
                     MaterialTheme.shapes.large,
                 ) else Modifier,
             )
-            .clickable(onClick = onSelect),
+            .selectable(selected = selected, role = Role.RadioButton, onClick = onSelect),
     )
 }
 

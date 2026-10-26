@@ -23,6 +23,7 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -37,6 +38,8 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -47,6 +50,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.PagerState
 import androidx.compose.foundation.pager.rememberPagerState
@@ -96,6 +100,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringArrayResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
@@ -797,7 +802,7 @@ private fun SpatialAudioCard() {
 }
 
 @Composable
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 private fun ProfilePicker(profile: Int, onSelected: (Int) -> Unit) {
     val hapticView = LocalView.current
     val entries = stringArrayResource(R.array.dolby_profile_entries)
@@ -852,6 +857,7 @@ private fun ProfilePicker(profile: Int, onSelected: (Int) -> Unit) {
             Column(
                 Modifier.fillMaxWidth().heightIn(max = 620.dp)
                     .verticalScroll(rememberScrollState())
+                    .selectableGroup()
                     .padding(horizontal = 20.dp, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
@@ -873,6 +879,8 @@ private fun ProfilePicker(profile: Int, onSelected: (Int) -> Unit) {
                         else -> R.string.dolby_profile_custom_summary
                     }
                     Surface(
+                        selected = selected,
+                        modifier = Modifier.semantics { role = Role.RadioButton },
                         onClick = {
                             hapticView.performDolbySelectionHaptic()
                             showProfiles = false
@@ -909,9 +917,10 @@ private fun ProfilePicker(profile: Int, onSelected: (Int) -> Unit) {
                                 )
                             }
                             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
+                                FlowRow(
+                                    itemVerticalAlignment = Alignment.CenterVertically,
                                     horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    verticalArrangement = Arrangement.spacedBy(4.dp),
                                 ) {
                                     Text(label, style = MaterialTheme.typography.titleMedium)
                                     if (profileValue == 0) {
@@ -1204,9 +1213,14 @@ private fun StrengthSettingContent(
 ) {
     val displayedValue = value.coerceIn(range).roundToInt()
     Column(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 10.dp)) {
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Row(
+            Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
             Text(title, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
             Surface(
+                modifier = Modifier.widthIn(min = 44.dp * LocalDensity.current.fontScale),
                 shape = MaterialTheme.shapes.small,
                 color = if (enabled) MaterialTheme.colorScheme.secondaryContainer
                     else MaterialTheme.colorScheme.surfaceContainerHighest,
@@ -1216,7 +1230,8 @@ private fun StrengthSettingContent(
                 Text(
                     displayedValue.toString(),
                     Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
-                    style = MaterialTheme.typography.labelMedium,
+                    style = MaterialTheme.typography.labelMedium.copy(fontFeatureSettings = "tnum"),
+                    textAlign = TextAlign.Center,
                 )
             }
         }

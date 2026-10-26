@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.material3.Card
@@ -132,6 +133,7 @@ fun EqualizerBands(viewModel: EqualizerViewModel) {
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     Surface(
+                        modifier = Modifier.widthIn(min = 76.dp * LocalDensity.current.fontScale),
                         shape = MaterialTheme.shapes.small,
                         color = MaterialTheme.colorScheme.secondaryContainer,
                         contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
@@ -139,8 +141,9 @@ fun EqualizerBands(viewModel: EqualizerViewModel) {
                         Text(
                             formatGain(sliderPosition),
                             modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp),
-                            style = MaterialTheme.typography.labelLarge,
+                            style = MaterialTheme.typography.labelLarge.copy(fontFeatureSettings = "tnum"),
                             fontWeight = FontWeight.SemiBold,
+                            textAlign = TextAlign.Center,
                         )
                     }
                 }

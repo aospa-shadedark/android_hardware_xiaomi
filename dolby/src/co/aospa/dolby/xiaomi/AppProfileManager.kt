@@ -27,6 +27,14 @@ internal class AppProfileManager(private val context: Context) {
         prefs.edit().putBoolean(KEY_ENABLED, enabled).apply()
     }
 
+    // Existing enabled installations have already opted in. A fresh install or
+    // cleared app data must explicitly approve monitoring even on a privileged ROM.
+    fun hasMonitoringConsent(): Boolean = prefs.getBoolean(KEY_MONITORING_CONSENT, isEnabled)
+
+    fun confirmMonitoringConsent() {
+        prefs.edit().putBoolean(KEY_MONITORING_CONSENT, true).apply()
+    }
+
     fun hasDismissedSetupGuide(): Boolean = prefs.getBoolean(KEY_SETUP_GUIDE_DISMISSED, false)
 
     fun dismissSetupGuide() {
@@ -82,6 +90,7 @@ internal class AppProfileManager(private val context: Context) {
         const val PREFS = "dolby_app_profiles"
         const val KEY_ENABLED = "monitoring_enabled"
         const val KEY_APP_PREFIX = "app_profile:"
+        private const val KEY_MONITORING_CONSENT = "monitoring_consent"
         private const val KEY_SETUP_GUIDE_DISMISSED = "setup_guide_dismissed_v2"
     }
 }

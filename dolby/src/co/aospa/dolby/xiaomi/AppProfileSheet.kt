@@ -24,6 +24,7 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -46,10 +47,12 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.produceState
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -57,6 +60,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringArrayResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.text.style.TextOverflow
@@ -73,7 +77,8 @@ internal fun AppProfileSheet(context: Context, onDismiss: () -> Unit) {
     var monitoring by remember { mutableStateOf(manager.isEnabled && manager.hasUsageAccess()) }
     var showSetupGuide by remember { mutableStateOf(!manager.hasDismissedSetupGuide()) }
     var showUsageAccessPrompt by remember { mutableStateOf(false) }
-    var query by remember { mutableStateOf("") }
+    var showMonitoringConsent by rememberSaveable { mutableStateOf(false) }
+    var query by rememberSaveable { mutableStateOf("") }
     var assignments by remember { mutableStateOf(manager.assignments()) }
     val apps by produceState<List<DolbyApp>?>(null, manager) {
         value = withContext(Dispatchers.IO) { manager.installedApps() }
@@ -107,8 +112,30 @@ internal fun AppProfileSheet(context: Context, onDismiss: () -> Unit) {
     }
 
     fun openUsageAccessSettings() {
+        // Opening Settings is an explicit request to allow app monitoring.
+        manager.confirmMonitoringConsent()
         showUsageAccessPrompt = false
         launcher.launch(Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS))
+    }
+
+    fun updateAutomaticSwitching(checked: Boolean) {
+        if (!checked) {
+            hapticView.performDolbyToggleHaptic(false)
+            manager.setEnabled(false)
+            DolbyAppProfileService.stop(context)
+            monitoring = false
+        } else if (!manager.hasUsageAccess()) {
+            usageAccess = false
+            showUsageAccessPrompt = true
+        } else if (!manager.hasMonitoringConsent()) {
+            showMonitoringConsent = true
+        } else {
+            hapticView.performDolbyToggleHaptic(true)
+            usageAccess = true
+            manager.setEnabled(true)
+            monitoring = true
+            DolbyAppProfileService.start(context)
+        }
     }
 
     ModalBottomSheet(onDismissRequest = onDismiss) {
@@ -124,7 +151,11 @@ internal fun AppProfileSheet(context: Context, onDismiss: () -> Unit) {
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.SpaceBetween,
                     ) {
-                        Text(stringResource(R.string.dolby_app_profiles), style = MaterialTheme.typography.titleLarge)
+                        Text(
+                            stringResource(R.string.dolby_app_profiles),
+                            modifier = Modifier.weight(1f),
+                            style = MaterialTheme.typography.titleLarge,
+                        )
                         IconButton(onClick = { showSetupGuide = true }) {
                             Icon(
                                 Icons.Default.Info,
@@ -171,7 +202,11 @@ internal fun AppProfileSheet(context: Context, onDismiss: () -> Unit) {
                         shape = MaterialTheme.shapes.extraLarge,
                     ) {
                         Row(
-                            Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 14.dp),
+                            Modifier.fillMaxWidth().toggleable(
+                                value = monitoring && usageAccess,
+                                role = Role.Switch,
+                                onValueChange = ::updateAutomaticSwitching,
+                            ).padding(horizontal = 18.dp, vertical = 14.dp),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(16.dp),
                         ) {
@@ -185,24 +220,7 @@ internal fun AppProfileSheet(context: Context, onDismiss: () -> Unit) {
                             }
                             Switch(
                                 checked = monitoring && usageAccess,
-                                enabled = true,
-                                onCheckedChange = { checked ->
-                                    if (!checked) {
-                                        hapticView.performDolbyToggleHaptic(false)
-                                        manager.setEnabled(false)
-                                        DolbyAppProfileService.stop(context)
-                                        monitoring = false
-                                    } else if (!manager.hasUsageAccess()) {
-                                        usageAccess = false
-                                        showUsageAccessPrompt = true
-                                    } else {
-                                        hapticView.performDolbyToggleHaptic(true)
-                                        usageAccess = true
-                                        manager.setEnabled(true)
-                                        monitoring = true
-                                        DolbyAppProfileService.start(context)
-                                    }
-                                },
+                                onCheckedChange = null,
                             )
                         }
                     }
@@ -212,6 +230,16 @@ internal fun AppProfileSheet(context: Context, onDismiss: () -> Unit) {
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true,
                         label = { Text(stringResource(R.string.dolby_app_profiles_search)) },
+                        trailingIcon = if (query.isNotBlank()) {
+                            {
+                                IconButton(onClick = { query = "" }) {
+                                    Icon(
+                                        Icons.Default.Clear,
+                                        contentDescription = stringResource(R.string.dolby_app_profiles_clear_search),
+                                    )
+                                }
+                            }
+                        } else null,
                         shape = MaterialTheme.shapes.large,
                     )
                 }
@@ -221,6 +249,15 @@ internal fun AppProfileSheet(context: Context, onDismiss: () -> Unit) {
                     Box(Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) {
                         CircularProgressIndicator(Modifier.size(28.dp))
                     }
+                }
+            } else if (filteredApps.isEmpty()) {
+                item {
+                    Text(
+                        stringResource(R.string.dolby_app_profiles_no_results),
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 20.dp),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                 }
             }
             items(filteredApps, key = { it.packageName }) { app ->
@@ -240,6 +277,28 @@ internal fun AppProfileSheet(context: Context, onDismiss: () -> Unit) {
                 )
             }
         }
+    }
+
+    if (showMonitoringConsent) {
+        AlertDialog(
+            onDismissRequest = { showMonitoringConsent = false },
+            title = { Text(stringResource(R.string.dolby_app_profiles_consent_title)) },
+            text = { Text(stringResource(R.string.dolby_app_profiles_consent_summary)) },
+            confirmButton = {
+                TextButton(onClick = {
+                    manager.confirmMonitoringConsent()
+                    showMonitoringConsent = false
+                    updateAutomaticSwitching(true)
+                }) {
+                    Text(stringResource(R.string.dolby_app_profiles_consent_allow))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showMonitoringConsent = false }) {
+                    Text(stringResource(R.string.dolby_app_profiles_setup_not_now))
+                }
+            },
+        )
     }
 
     if (showUsageAccessPrompt) {

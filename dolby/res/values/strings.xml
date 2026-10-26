@@ -43,7 +43,12 @@
     <string name="dolby_app_profiles_access_required">Allow Usage Access to detect active apps.</string>
     <string name="dolby_app_profiles_help">App profile help</string>
     <string name="dolby_app_profiles_grant_access">Open Settings</string>
+    <string name="dolby_app_profiles_consent_title">Allow automatic switching?</string>
+    <string name="dolby_app_profiles_consent_summary">Allow Dolby to detect which app is open and switch sound profiles automatically.</string>
+    <string name="dolby_app_profiles_consent_allow">Allow</string>
     <string name="dolby_app_profiles_search">Search apps</string>
+    <string name="dolby_app_profiles_clear_search">Clear search</string>
+    <string name="dolby_app_profiles_no_results">No apps found</string>
     <string name="dolby_app_profiles_follow_default">Use default</string>
     <string name="dolby_preset">Graphic equalizer</string>
     <string name="dolby_off">Off</string>
