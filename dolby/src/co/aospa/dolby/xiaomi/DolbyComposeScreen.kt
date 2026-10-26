@@ -324,10 +324,12 @@ internal fun DolbyComposeScreen(
                             viewModel = equalizerViewModel,
                             enabled = enabled,
                             modifier = Modifier.fillMaxSize(),
+                            isCurrentPage = !pagerState.isScrollInProgress && pagerState.settledPage == pageIndex,
                         )
                         DolbyDestination.ADVANCED -> AdvancedPage(
                             context = context,
                             enabled = enabled,
+                            isCurrentPage = !pagerState.isScrollInProgress && pagerState.settledPage == pageIndex,
                             settingsLoaded = settingsLoaded,
                             settingsLoadError = settingsLoadError,
                             onRetrySettings = { settingsRetry++ },
@@ -960,6 +962,7 @@ private fun ProfilePicker(profile: Int, onSelected: (Int) -> Unit) {
 private fun AdvancedPage(
     context: Context,
     enabled: Boolean,
+    isCurrentPage: Boolean,
     settingsLoaded: Boolean,
     settingsLoadError: Boolean,
     onRetrySettings: () -> Unit,
@@ -980,6 +983,10 @@ private fun AdvancedPage(
     onStereoAmountChange: (Float) -> Unit,
     onStereoAmountFinished: (Int) -> Unit,
 ) {
+    DolbyFirstUseHelp(
+        topic = DolbyHelpTopic.ADVANCED,
+        isVisible = isCurrentPage && enabled && settingsLoaded,
+    )
     Column(
         modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState())
             .padding(horizontal = 20.dp, vertical = 12.dp),
@@ -1102,7 +1109,8 @@ private fun ChoiceSetting(
     val index = values.indexOf(selected.toString()).coerceAtLeast(0)
     Card(shape = MaterialTheme.shapes.extraLarge,
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)) {
-        Column(Modifier.fillMaxWidth().padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Column(Modifier.fillMaxWidth().padding(18.dp).selectableGroup(),
+            verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(title, style = MaterialTheme.typography.titleMedium)
             summary?.let {
                 Text(
@@ -1141,7 +1149,7 @@ private fun ChoiceSetting(
                             Row(
                                 Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp),
                                 verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.SpaceBetween,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
                             ) {
                                 Text(entries[i], style = MaterialTheme.typography.labelLarge,
                                     modifier = Modifier.weight(1f), maxLines = 2)

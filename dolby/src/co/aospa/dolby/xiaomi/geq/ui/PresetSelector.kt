@@ -250,10 +250,27 @@ fun PresetSelector(
             ) {
                 item {
                     Column(Modifier.fillMaxWidth()) {
-                        Text(
-                            text = stringResource(R.string.dolby_geq_manage_presets),
-                            style = MaterialTheme.typography.titleLarge,
-                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(
+                                text = stringResource(R.string.dolby_geq_manage_presets),
+                                modifier = Modifier.weight(1f),
+                                style = MaterialTheme.typography.titleLarge,
+                            )
+                            IconButton(onClick = {
+                                hapticView.performDolbySelectionHaptic()
+                                showPresetHelp = true
+                            }) {
+                                Icon(
+                                    Icons.Default.Info,
+                                    contentDescription = stringResource(R.string.dolby_geq_preset_help_action),
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.size(20.dp),
+                                )
+                            }
+                        }
                         Spacer(Modifier.height(16.dp))
                         Button(
                             modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
@@ -485,22 +502,15 @@ private fun PresetLeadingIcon(preset: Preset, selected: Boolean) {
     if (preset.isUserDefined || iconResource == null) {
         PresetSignatureIcon(preset, selected)
     } else {
-        PresetGenreIcon(preset, selected, iconResource)
+        PresetGenreIcon(selected, iconResource)
     }
 }
 
 @Composable
-private fun PresetGenreIcon(preset: Preset, selected: Boolean, iconResource: Int) {
+private fun PresetGenreIcon(selected: Boolean, iconResource: Int) {
     val scheme = MaterialTheme.colorScheme
-    val tones = listOf(
-        scheme.primaryContainer to scheme.onPrimaryContainer,
-        scheme.secondaryContainer to scheme.onSecondaryContainer,
-        scheme.tertiaryContainer to scheme.onTertiaryContainer,
-    )
-    val toneIndex = (preset.name.hashCode() and Int.MAX_VALUE) % tones.size
-    val (toneBackground, toneForeground) = tones[toneIndex]
-    val background = if (selected) scheme.primaryContainer else toneBackground
-    val foreground = if (selected) scheme.onPrimaryContainer else toneForeground
+    val background = if (selected) scheme.primaryContainer else scheme.secondaryContainer
+    val foreground = if (selected) scheme.onPrimaryContainer else scheme.onSecondaryContainer
 
     Box(Modifier.width(40.dp).height(40.dp)) {
         Box(
