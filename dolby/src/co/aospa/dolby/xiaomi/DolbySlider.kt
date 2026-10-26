@@ -7,6 +7,8 @@
 package co.aospa.dolby.xiaomi
 
 import android.os.SystemClock
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -14,6 +16,10 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsDraggedAsState
+import androidx.compose.foundation.interaction.collectIsFocusedAsState
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
@@ -26,6 +32,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
@@ -43,6 +50,15 @@ internal fun DolbySlider(
     onValueChangeFinished: (() -> Unit)? = null,
 ) {
     val view = LocalView.current
+    val interactionSource = remember { MutableInteractionSource() }
+    val dragged by interactionSource.collectIsDraggedAsState()
+    val pressed by interactionSource.collectIsPressedAsState()
+    val focused by interactionSource.collectIsFocusedAsState()
+    val thumbScale by animateFloatAsState(
+        targetValue = if (enabled && (dragged || pressed || focused)) 1.18f else 1f,
+        animationSpec = tween(100),
+        label = "slider interaction",
+    )
     var lastTickTime by remember { mutableLongStateOf(0L) }
     val tickCount = if (steps > 0) steps + 1 else 20
     fun tickPosition(position: Float): Int =
@@ -65,6 +81,7 @@ internal fun DolbySlider(
         valueRange = valueRange,
         steps = steps,
         enabled = enabled,
+        interactionSource = interactionSource,
         onValueChangeFinished = {
             view.performDolbySliderReleaseHaptic()
             onValueChangeFinished?.invoke()
@@ -73,6 +90,10 @@ internal fun DolbySlider(
             Box(
                 Modifier
                     .size(18.dp)
+                    .graphicsLayer {
+                        scaleX = thumbScale
+                        scaleY = thumbScale
+                    }
                     .clip(CircleShape)
                     .background(active)
                     .border(2.dp, MaterialTheme.colorScheme.surface, CircleShape),
