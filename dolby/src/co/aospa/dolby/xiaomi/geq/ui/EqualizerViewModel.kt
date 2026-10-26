@@ -56,11 +56,16 @@ class EqualizerViewModel(
     private var loadedRevision = repository.settingsRevision
     private var editGeneration = 0L
     private var cleared = false
+    private var nextNameReservation = 0L
+    private val pendingPresetNames = mutableMapOf<Long, String>()
     private val refreshRequests = MutableStateFlow(0L)
 
     init {
         repository.userPresets.onEach { userPresets ->
             _presets.value = userPresets + repository.builtInPresets
+            pendingPresetNames.entries.removeAll { pending ->
+                userPresets.any { it.name == pending.value }
+            }
             if (!_isLoading.value && _preset.value.name == null && !_preset.value.isMutated) {
                 _preset.value = resolvePreset(_preset.value.bandGains, _preset.value)
             }
@@ -147,8 +152,15 @@ class EqualizerViewModel(
         }
     }
 
-    private fun applyPreset(preset: Preset, explicitSelection: Boolean = false) {
-        if (cleared || (!explicitSelection && !canEdit())) return
+    private fun applyPreset(
+        preset: Preset,
+        explicitSelection: Boolean = false,
+        newNameReservation: Long? = null,
+    ) {
+        if (cleared || (!explicitSelection && !canEdit())) {
+            newNameReservation?.let(pendingPresetNames::remove)
+            return
+        }
         // A preset/reset is a complete curve, so it can target the current profile
         // even before its old curve has loaded. Band edits still require that load.
         val profile = if (explicitSelection) repository.activeProfile else currentProfile
@@ -160,8 +172,19 @@ class EqualizerViewModel(
         _hasLoadError.value = false
         _isLoading.value = false
         enqueueOperation {
-            if (repository.setBandGains(preset.bandGains, profile, revision) && preset.isUserDefined) {
-                repository.addPreset(preset)
+            var savedName = false
+            try {
+                // The shared queue keeps this preflight and save together. A
+                // rejected duplicate must not first change the native curve.
+                if (preset.isUserDefined) {
+                    repository.validatePresetSave(preset, isNew = newNameReservation != null)
+                }
+                if (repository.setBandGains(preset.bandGains, profile, revision) && preset.isUserDefined) {
+                    repository.addPreset(preset, isNew = newNameReservation != null)
+                    savedName = true
+                }
+            } finally {
+                if (!savedName) newNameReservation?.let(pendingPresetNames::remove)
             }
         }
     }
@@ -267,6 +290,8 @@ class EqualizerViewModel(
             PresetNameValidationError.NAME_EMPTY
         } else if (_presets.value.any {
                 it.name != excluding?.name && it.name?.equals(normalizedName, ignoreCase = true) == true
+            } || pendingPresetNames.values.any {
+                it != excluding?.name && it.equals(normalizedName, ignoreCase = true)
             }) {
             PresetNameValidationError.NAME_EXISTS
         } else if (normalizedName.length > 50) {
@@ -277,13 +302,23 @@ class EqualizerViewModel(
     fun createNewPreset(name: String): PresetNameValidationError? {
         if (cleared || !canEdit()) return PresetNameValidationError.PROFILE_NOT_READY
         validatePresetName(name)?.let { return it }
-        applyPreset(_preset.value.copy(name = name.trim(), isUserDefined = true, isMutated = false))
+        val normalizedName = name.trim()
+        val reservation = reservePresetName(normalizedName)
+        applyPreset(
+            _preset.value.copy(name = normalizedName, isUserDefined = true, isMutated = false),
+            newNameReservation = reservation,
+        )
         return null
     }
 
     fun importPreset(name: String, bandGains: List<BandGain>): PresetNameValidationError? {
         validatePresetName(name)?.let { return it }
-        applyPreset(Preset(name = name.trim(), bandGains = bandGains, isUserDefined = true), explicitSelection = true)
+        val normalizedName = name.trim()
+        applyPreset(
+            Preset(name = normalizedName, bandGains = bandGains, isUserDefined = true),
+            explicitSelection = true,
+            newNameReservation = reservePresetName(normalizedName),
+        )
         return null
     }
 
@@ -297,9 +332,23 @@ class EqualizerViewModel(
             name = normalizedName,
             isMutated = false,
         )
+        val reservation = reservePresetName(normalizedName)
         if (isActive) _preset.value = replacement
-        enqueueOperation { repository.renamePreset(preset, replacement) }
+        enqueueOperation {
+            try {
+                repository.renamePreset(preset, replacement)
+            } catch (exception: Exception) {
+                pendingPresetNames.remove(reservation)
+                throw exception
+            }
+        }
         return null
+    }
+
+    private fun reservePresetName(name: String): Long {
+        val reservation = nextNameReservation++
+        pendingPresetNames[reservation] = name
+        return reservation
     }
 
     fun deletePreset(preset: Preset, shouldReset: Boolean = true) {

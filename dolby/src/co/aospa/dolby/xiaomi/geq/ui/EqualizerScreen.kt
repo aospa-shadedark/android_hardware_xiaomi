@@ -28,6 +28,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -41,6 +42,7 @@ fun EqualizerScreen(
     enabled: Boolean = true,
     modifier: Modifier = Modifier,
 ) {
+    val presetStateHolder = rememberSaveableStateHolder()
     // Keep result registrations alive while a profile refresh replaces the editor
     // with its loading/error UI. Transfer snapshots live in the ViewModel.
     val importLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) {
@@ -100,11 +102,13 @@ fun EqualizerScreen(
                         )
                     }
                 } else {
-                    PresetSelector(
-                        viewModel = viewModel,
-                        onImport = { importLauncher.launch(arrayOf("application/json", "application/octet-stream")) },
-                        onExport = { viewModel.prepareExport()?.let { exportLauncher.launch(it) } },
-                    )
+                    presetStateHolder.SaveableStateProvider("presetSelector") {
+                        PresetSelector(
+                            viewModel = viewModel,
+                            onImport = { importLauncher.launch(arrayOf("application/json", "application/octet-stream")) },
+                            onExport = { viewModel.prepareExport()?.let { exportLauncher.launch(it) } },
+                        )
+                    }
                     EqualizerBands(viewModel = viewModel)
                 }
             }

@@ -10,11 +10,6 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.res.stringResource
 
 @Composable
@@ -23,21 +18,13 @@ fun ConfirmationDialog(
     onConfirm: () -> Unit,
     onDismiss: () -> Unit
 ) {
-    var showDialog by remember { mutableStateOf(true) }
-    LaunchedEffect(showDialog) {
-        if (!showDialog) onDismiss()
-    }
-    if (!showDialog) return
-
     AlertDialog(
-        onDismissRequest = { showDialog = false },
+        onDismissRequest = onDismiss,
         confirmButton = {
             TextButton(
                 onClick = {
-                    if (showDialog) {
-                        showDialog = false
-                        onConfirm()
-                    }
+                    onDismiss()
+                    onConfirm()
                 }
             ) {
                 Text(
@@ -47,7 +34,7 @@ fun ConfirmationDialog(
         },
         dismissButton = {
             TextButton(
-                onClick = { showDialog = false }
+                onClick = onDismiss
             ) {
                 Text(
                     stringResource(id = android.R.string.cancel)

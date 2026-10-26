@@ -64,6 +64,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -92,10 +93,10 @@ fun PresetSelector(
     val presets by viewModel.presets.collectAsState()
     val currentPreset by viewModel.preset.collectAsState()
     var expanded by remember { mutableStateOf(false) }
-    var showNewPresetDialog by remember { mutableStateOf(false) }
-    var showPresetManager by remember { mutableStateOf(false) }
-    var presetToRename by remember { mutableStateOf<Preset?>(null) }
-    var presetToDelete by remember { mutableStateOf<Preset?>(null) }
+    var showNewPresetDialog by rememberSaveable { mutableStateOf(false) }
+    var showPresetManager by rememberSaveable { mutableStateOf(false) }
+    var presetToRenameName by rememberSaveable { mutableStateOf<String?>(null) }
+    var presetToDeleteName by rememberSaveable { mutableStateOf<String?>(null) }
     val importedPreset by viewModel.importedPreset.collectAsState()
     val transferError by viewModel.transferError.collectAsState()
     val hapticView = LocalView.current
@@ -314,19 +315,19 @@ fun PresetSelector(
                             viewModel.setPreset(preset)
                             showPresetManager = false
                         },
-                        onRename = { presetToRename = preset },
-                        onDelete = { presetToDelete = preset },
+                        onRename = { presetToRenameName = preset.name },
+                        onDelete = { presetToDeleteName = preset.name },
                     )
                 }
             }
         }
     }
-    presetToRename?.let { target ->
+    presets.firstOrNull { it.isUserDefined && it.name == presetToRenameName }?.let { target ->
         PresetNameDialog(
             title = stringResource(R.string.dolby_geq_rename_preset),
             presetName = target.name.orEmpty(),
             onPresetNameSet = { viewModel.renamePreset(target, it) },
-            onDismissDialog = { presetToRename = null },
+            onDismissDialog = { presetToRenameName = null },
         )
     }
     importedPreset?.let { imported ->
@@ -353,11 +354,11 @@ fun PresetSelector(
             },
         )
     }
-    presetToDelete?.let { target ->
+    presets.firstOrNull { it.isUserDefined && it.name == presetToDeleteName }?.let { target ->
         ConfirmationDialog(
             text = stringResource(R.string.dolby_geq_delete_preset_prompt),
             onConfirm = { viewModel.deletePreset(target) },
-            onDismiss = { presetToDelete = null },
+            onDismiss = { presetToDeleteName = null },
         )
     }
 }

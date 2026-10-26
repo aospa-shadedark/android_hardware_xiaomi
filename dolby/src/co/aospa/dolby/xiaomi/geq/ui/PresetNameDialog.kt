@@ -14,10 +14,10 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
@@ -31,15 +31,11 @@ fun PresetNameDialog(
     onPresetNameSet: (String) -> PresetNameValidationError?,
     onDismissDialog: () -> Unit
 ) {
-    var showDialog by remember { mutableStateOf(true) }
-    LaunchedEffect(showDialog) {
-        if (!showDialog) onDismissDialog()
-    }
-    var text by remember { mutableStateOf(presetName) }
-    var error by remember { mutableStateOf<PresetNameValidationError?>(null) }
+    var text by rememberSaveable(title, presetName) { mutableStateOf(presetName) }
+    var error by remember(title, presetName) { mutableStateOf<PresetNameValidationError?>(null) }
 
-    if (showDialog) AlertDialog(
-        onDismissRequest = { showDialog = false },
+    AlertDialog(
+        onDismissRequest = onDismissDialog,
         confirmButton = {
             TextButton(
                 onClick = {
@@ -49,8 +45,8 @@ fun PresetNameDialog(
                         return@TextButton
                     }
                     // succeeded
-                    showDialog = false
                     error = null
+                    onDismissDialog()
                 }
             ) {
                 Text(
@@ -60,7 +56,7 @@ fun PresetNameDialog(
         },
         dismissButton = {
             TextButton(
-                onClick = { showDialog = false }
+                onClick = onDismissDialog
             ) {
                 Text(
                     stringResource(id = android.R.string.cancel)

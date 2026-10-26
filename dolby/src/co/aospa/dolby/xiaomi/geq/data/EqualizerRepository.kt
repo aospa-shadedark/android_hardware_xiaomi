@@ -65,7 +65,7 @@ class EqualizerRepository(
         List(names.size) { index ->
             Preset(
                 name = names[index],
-                bandGains = deserializeGains(presets[index]),
+                bandGains = requireNotNull(deserializeGains(presets[index])),
             )
         }
     }
@@ -79,10 +79,15 @@ class EqualizerRepository(
         val listener = SharedPreferences.OnSharedPreferenceChangeListener { _, _ ->
             dlog(TAG, "presetsSharedPrefs changed")
             trySend(
-                presetsSharedPrefs.all.map { (key, value) ->
+                presetsSharedPrefs.all.mapNotNull { (key, value) ->
+                    val serialized = value as? String ?: return@mapNotNull null
+                    if (PresetCurveCodec.parseEditable(serialized) == null) {
+                        Log.w(TAG, "Skipping invalid saved preset: $key")
+                        return@mapNotNull null
+                    }
                     Preset(
                         name = key,
-                        bandGains = deserializeGains(value.toString()),
+                        bandGains = requireNotNull(deserializeGains(serialized)),
                         isUserDefined = true
                     )
                 }
@@ -102,13 +107,16 @@ class EqualizerRepository(
 
     suspend fun getBandGains(profile: Int = activeProfile): List<BandGain> = withContext(Dispatchers.IO) {
         synchronized(dolbyController.settingsLock) {
-            val gains = profileSharedPrefs(profile).getString(PREF_PRESET, null)
-                ?: dolbyController.getPreset(profile)
-            if (gains.isNullOrEmpty()) {
-                defaultPreset.bandGains
-            } else {
-                deserializeGains(gains)
-            }.also {
+            val prefs = profileSharedPrefs(profile)
+            val stored = prefs.all[PREF_PRESET]
+            val storedGains = (stored as? String)?.let(::deserializeGains)
+            if (stored != null && storedGains == null) {
+                Log.w(TAG, "Removing invalid curve for profile $profile")
+                prefs.edit().remove(PREF_PRESET).apply()
+            }
+            (storedGains ?: requireNotNull(deserializeGains(dolbyController.getPreset(profile))) {
+                "Dolby returned an invalid equalizer curve"
+            }).also {
                 dlog(TAG, "getBandGains: $it")
             }
         }
@@ -132,26 +140,59 @@ class EqualizerRepository(
         }
     }
 
-    suspend fun addPreset(preset: Preset) = withContext(Dispatchers.IO) {
+    suspend fun addPreset(preset: Preset, isNew: Boolean = false) = withContext(Dispatchers.IO) {
         dlog(TAG, "addPreset($preset)")
-        presetsSharedPrefs.edit()
-            .putString(preset.name, serializeGains(preset.bandGains))
-            .apply()
+        synchronized(presetLock) {
+            val name = requireNotNull(preset.name)
+            require(isNew || presetsSharedPrefs.contains(name)) { "Preset no longer exists" }
+            requirePresetNameAvailable(name, excluding = name.takeUnless { isNew })
+            presetsSharedPrefs.edit()
+                .putString(name, serializeGains(preset.bandGains))
+                .apply()
+        }
+    }
+
+    suspend fun validatePresetSave(preset: Preset, isNew: Boolean) = withContext(Dispatchers.IO) {
+        synchronized(presetLock) {
+            val name = requireNotNull(preset.name)
+            require(isNew || presetsSharedPrefs.contains(name)) { "Preset no longer exists" }
+            requirePresetNameAvailable(name, excluding = name.takeUnless { isNew })
+            serializeGains(preset.bandGains)
+            Unit
+        }
     }
 
     suspend fun removePreset(preset: Preset) = withContext(Dispatchers.IO) {
         dlog(TAG, "removePreset($preset)")
-        presetsSharedPrefs.edit()
-            .remove(preset.name)
-            .apply()
+        synchronized(presetLock) {
+            presetsSharedPrefs.edit()
+                .remove(preset.name)
+                .apply()
+        }
     }
 
     suspend fun renamePreset(previous: Preset, replacement: Preset) = withContext(Dispatchers.IO) {
         require(previous.isUserDefined && replacement.isUserDefined)
-        presetsSharedPrefs.edit()
-            .remove(previous.name)
-            .putString(replacement.name, serializeGains(replacement.bandGains))
-            .apply()
+        synchronized(presetLock) {
+            val name = requireNotNull(replacement.name)
+            require(presetsSharedPrefs.contains(previous.name)) { "Preset no longer exists" }
+            requirePresetNameAvailable(name, excluding = previous.name)
+            presetsSharedPrefs.edit()
+                .remove(previous.name)
+                .putString(name, serializeGains(replacement.bandGains))
+                .apply()
+        }
+    }
+
+    private fun requirePresetNameAvailable(name: String, excluding: String? = null) {
+        require(name.isNotBlank() && name == name.trim() && name.length <= 50) { "Invalid preset name" }
+        require(builtInPresets.none { it.name?.equals(name, ignoreCase = true) == true } &&
+            presetsSharedPrefs.all.none { (key, value) ->
+                key != excluding && key.equals(name, ignoreCase = true) &&
+                    (value as? String)?.let(PresetCurveCodec::parseEditable) != null
+            }) {
+            "Preset name already exists"
+        }
     }
 
     suspend fun readPreset(uri: Uri): Preset = withContext(Dispatchers.IO) {
@@ -198,6 +239,7 @@ class EqualizerRepository(
         // worker, and the completed tail is released so it cannot retain a screen.
         private val operationScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
         private val operationLock = Any()
+        private val presetLock = Any()
         private var lastOperation: Job? = null
 
         val tenBandFreqs = intArrayOf(
@@ -213,20 +255,9 @@ class EqualizerRepository(
             16000
         )
 
-        fun deserializeGains(bandGains: String): List<BandGain> {
-            val gains: List<Int> =
-                bandGains.split(",").runCatching {
-                    require(size == 20) {
-                        "Preset must have 20 elements, has only $size!"
-                    }
-                    map { it.toInt() }
-                        .twentyToTenBandGains()
-                }.onFailure { exception ->
-                    Log.e(TAG, "Failed to parse preset", exception)
-                }.getOrDefault(
-                    // fallback to flat
-                    List<Int>(10) { 0 }
-                )
+        fun deserializeGains(bandGains: String): List<BandGain>? {
+            val gains = PresetCurveCodec.parseNative(bandGains)?.toList()
+                ?.twentyToTenBandGains() ?: return null
             return List(10) { index ->
                 BandGain(
                     band = tenBandFreqs[index],
@@ -236,6 +267,9 @@ class EqualizerRepository(
         }
 
         fun serializeGains(bandGains: List<BandGain>): String {
+            require(bandGains.size == tenBandFreqs.size && bandGains.withIndex().all { (index, band) ->
+                band.band == tenBandFreqs[index] && band.gain in -100..100
+            }) { "Preset must contain the ten editable bands within the gain range" }
             return bandGains.map { it.gain }
                 .tenToTwentyBandGains()
                 .joinToString(",")
