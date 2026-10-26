@@ -150,6 +150,7 @@ internal fun DolbyComposeScreen(
     val enabled by controller.enabled.collectAsState()
     val profile by controller.activeProfile.collectAsState()
     val settingsRevision by controller.settingsRevision.collectAsState()
+    val effectGeneration by controller.effectGeneration.collectAsState()
     LaunchedEffect(pagerState, hapticView) {
         snapshotFlow { pagerState.settledPage }
             .distinctUntilChanged()
@@ -172,10 +173,10 @@ internal fun DolbyComposeScreen(
     var ieq by remember { mutableStateOf(0) }
     var dialogueAmount by remember { mutableStateOf(0f) }
     var stereoAmount by remember { mutableStateOf(0f) }
-    var loadedSettingsKey by remember { mutableStateOf<Pair<Int, Long>?>(null) }
-    var failedSettingsKey by remember { mutableStateOf<Pair<Int, Long>?>(null) }
+    var loadedSettingsKey by remember { mutableStateOf<Triple<Int, Long, Long>?>(null) }
+    var failedSettingsKey by remember { mutableStateOf<Triple<Int, Long, Long>?>(null) }
     var settingsRetry by remember { mutableIntStateOf(0) }
-    val settingsKey = profile to settingsRevision
+    val settingsKey = Triple(profile, settingsRevision, effectGeneration)
     val settingsLoaded = loadedSettingsKey == settingsKey
     val settingsLoadError = failedSettingsKey == settingsKey
     val destinationTitle = when (destination) {
@@ -184,11 +185,16 @@ internal fun DolbyComposeScreen(
         DolbyDestination.ADVANCED -> R.string.dolby_nav_advanced
     }
 
-    LaunchedEffect(profile, settingsRevision, settingsRetry) {
+    LaunchedEffect(settingsKey, settingsRetry) {
+        val (targetProfile, targetRevision, targetGeneration) = settingsKey
         loadedSettingsKey = null
         failedSettingsKey = null
         try {
-            val settings = withContext(Dispatchers.IO) { controller.readProfileSettings(profile) }
+            val settings = withContext(Dispatchers.IO) { controller.readProfileSettings(targetProfile) }
+            if (controller.activeProfile.value != targetProfile ||
+                controller.settingsRevision.value != targetRevision ||
+                controller.effectGeneration.value != targetGeneration
+            ) return@LaunchedEffect
             bass = settings.bass
             volume = settings.volume
             dialogue = settings.dialogue
@@ -201,8 +207,11 @@ internal fun DolbyComposeScreen(
         } catch (exception: CancellationException) {
             throw exception
         } catch (exception: Exception) {
-            Log.e("DolbySettings", "Unable to read profile $profile", exception)
-            failedSettingsKey = settingsKey
+            Log.e("DolbySettings", "Unable to read profile $targetProfile", exception)
+            if (controller.activeProfile.value == targetProfile &&
+                controller.settingsRevision.value == targetRevision &&
+                controller.effectGeneration.value == targetGeneration
+            ) failedSettingsKey = settingsKey
         }
     }
 
