@@ -91,6 +91,6 @@ internal class AppProfileManager(private val context: Context) {
         const val KEY_ENABLED = "monitoring_enabled"
         const val KEY_APP_PREFIX = "app_profile:"
         private const val KEY_MONITORING_CONSENT = "monitoring_consent"
-        private const val KEY_SETUP_GUIDE_DISMISSED = "setup_guide_dismissed_v2"
+        private const val KEY_SETUP_GUIDE_DISMISSED = "setup_guide_dismissed_v4"
     }
 }
