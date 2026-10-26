@@ -17,7 +17,11 @@
     <string name="dolby_advanced_disabled">Turn on Dolby Atmos to adjust advanced settings.</string>
     <string name="dolby_help_got_it">Got it</string>
     <string name="dolby_eq_help_title">Shape your sound</string>
-    <string name="dolby_eq_help_message">Choose a preset, or select a band on the graph or from the 10 frequency buttons below it. Adjust its level with the slider.\n\nChanges are saved to the current profile. Tap + to save your own preset.</string>
+    <string name="dolby_eq_help_message">Choose a preset or select a band on the graph or below. Adjust its level with the slider. Normal shows 10 bands; Pro lets you edit all 20.\n\nChanges are saved to the active profile. Tap + to save a preset.</string>
+    <string name="dolby_eq_pro">Pro</string>
+    <string name="dolby_eq_pro_active">Pro mode</string>
+    <string name="dolby_eq_normal_mode">Normal mode</string>
+    <string name="dolby_eq_pro_scroll">Swipe the graph to see all bands.</string>
     <string name="dolby_advanced_help_title">Before you adjust</string>
     <string name="dolby_advanced_help_message">Changes here apply to every profile.\n\nFor Dynamic, we recommend keeping the default settings. You can restore them with Reset profiles on Home.</string>
     <string name="dolby_profile_context">%1$s profile</string>
@@ -101,7 +105,9 @@
     <string name="dolby_eq_retry">Try again</string>
     <string name="dolby_geq_save_new_preset">Save as new preset</string>
     <string name="dolby_geq_manage_presets">Manage presets</string>
-    <string name="dolby_geq_preset_help">Imported presets with 10, 15, or 20 bands are adjusted to the controls shown here. Exports save the 10-band curve.</string>
+    <string name="dolby_geq_preset_help_title">About presets</string>
+    <string name="dolby_geq_preset_help">Normal mode edits 10 bands; Pro mode edits all 20. Imported presets are mapped to Dolby’s equalizer and saved as custom presets. Export a custom preset to share it.</string>
+    <string name="dolby_geq_preset_help_action">Preset help</string>
     <string name="dolby_geq_custom_preset_hint">Edits are saved automatically</string>
     <string name="dolby_geq_built_in_presets">Dolby presets</string>
     <string name="dolby_geq_your_presets">Your presets</string>

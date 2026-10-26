@@ -19,6 +19,7 @@ import androidx.lifecycle.viewmodel.viewModelFactory
 import co.aospa.dolby.xiaomi.DolbyConstants.Companion.dlog
 import co.aospa.dolby.xiaomi.geq.data.BandGain
 import co.aospa.dolby.xiaomi.geq.data.EqualizerRepository
+import co.aospa.dolby.xiaomi.geq.data.EqualizerCurve
 import co.aospa.dolby.xiaomi.geq.data.Preset
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -40,6 +41,8 @@ class EqualizerViewModel(
     val presets = _presets.asStateFlow()
     private val _preset = MutableStateFlow(repository.defaultPreset)
     val preset = _preset.asStateFlow()
+    private val _proMode = MutableStateFlow(repository.proMode)
+    val proMode = _proMode.asStateFlow()
     private val _isLoading = MutableStateFlow(true)
     val isLoading = _isLoading.asStateFlow()
     private val _hasLoadError = MutableStateFlow(false)
@@ -62,6 +65,7 @@ class EqualizerViewModel(
     private val refreshRequests = MutableStateFlow(0L)
 
     init {
+        repository.proModeFlow.onEach { _proMode.value = it }.launchIn(viewModelScope)
         repository.userPresets.onEach { userPresets ->
             _presets.value = userPresets + repository.builtInPresets
             pendingPresetNames.entries.removeAll { pending ->
@@ -132,13 +136,22 @@ class EqualizerViewModel(
     }
 
     private fun resolvePreset(gains: List<BandGain>, previous: Preset? = null): Preset {
+        val nativeGains = EqualizerCurve.toNative(gains)
+        fun matches(preset: Preset) = EqualizerCurve.toNative(preset.bandGains) == nativeGains
         val named = _presets.value.find {
-            it.name == previous?.name && it.isUserDefined == previous?.isUserDefined && it.bandGains == gains
+            it.name == previous?.name && it.isUserDefined == previous?.isUserDefined && matches(it)
         }
         // A reset should resolve to Flat even if a saved custom preset has the
         // same zero gains. Preserve an explicitly selected custom preset above.
-        return named ?: repository.builtInPresets.find { it.bandGains == gains }
-            ?: _presets.value.find { it.bandGains == gains } ?: Preset(bandGains = gains)
+        return named ?: repository.builtInPresets.find(::matches)
+            ?: _presets.value.find(::matches) ?: Preset(bandGains = nativeGains)
+    }
+
+    fun setProMode(enabled: Boolean) {
+        if (cleared || enabled == _proMode.value) return
+        // This is an editor preference, never an audio operation.
+        _proMode.value = enabled
+        repository.setProMode(enabled)
     }
 
     private fun canEdit() = !_isLoading.value && !_hasLoadError.value &&
@@ -283,14 +296,24 @@ class EqualizerViewModel(
         applyPreset(preset, explicitSelection = true)
     }
 
-    fun setGain(index: Int, gain: Int) {
-        if (index !in _preset.value.bandGains.indices) return
+    fun setGain(index: Int, gain: Int, inProMode: Boolean) {
+        if (inProMode != _proMode.value || !canEdit()) return
         val current = _preset.value
+        val nativeGains = EqualizerCurve.toNative(current.bandGains)
+        val editorGains = if (inProMode) nativeGains else EqualizerCurve.toStandard(nativeGains)
+        if (index !in editorGains.indices) return
+        val edited = editorGains.mapIndexed { bandIndex, band ->
+            if (bandIndex == index) band.copy(gain = gain.coerceIn(-100, 100)) else band
+        }
+        val merged = if (inProMode) edited else EqualizerCurve.mergeStandard(nativeGains, edited)
+        // Keep legacy ten-band presets in their original format. Once a curve
+        // contains Pro detail, retain all twenty values even in the simple view.
+        val gainsToSave = if (!inProMode && current.bandGains.size == 10 &&
+            EqualizerCurve.toNative(edited) == merged
+        ) edited else merged
         applyPreset(current.copy(
             name = if (current.isUserDefined) current.name else null,
-            bandGains = current.bandGains.mapIndexed { bandIndex, band ->
-                if (bandIndex == index) band.copy(gain = gain.coerceIn(-100, 100)) else band
-            },
+            bandGains = gainsToSave,
             isMutated = true,
         ))
     }
@@ -316,7 +339,13 @@ class EqualizerViewModel(
         val normalizedName = name.trim()
         val reservation = reservePresetName(normalizedName)
         applyPreset(
-            _preset.value.copy(name = normalizedName, isUserDefined = true, isMutated = false),
+            _preset.value.copy(
+                name = normalizedName,
+                bandGains = if (_proMode.value) EqualizerCurve.toNative(_preset.value.bandGains)
+                    else _preset.value.bandGains,
+                isUserDefined = true,
+                isMutated = false,
+            ),
             newNameReservation = reservation,
         )
         return null
@@ -404,10 +433,12 @@ private fun Preset.toTransferState() = Bundle().apply {
 private fun Bundle.toPreset(): Preset? {
     val frequencies = getIntArray("frequencies") ?: return null
     val gains = getIntArray("gains") ?: return null
-    if (frequencies.size != 10 || gains.size != frequencies.size) return null
+    if (frequencies.size !in listOf(10, 20) || gains.size != frequencies.size) return null
+    val bands = frequencies.indices.map { BandGain(frequencies[it], gains[it]) }
+    if (!EqualizerCurve.isEditable(bands)) return null
     return Preset(
         name = getString("name"),
-        bandGains = frequencies.indices.map { BandGain(frequencies[it], gains[it]) },
+        bandGains = bands,
         isUserDefined = true,
     )
 }

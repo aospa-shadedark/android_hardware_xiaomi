@@ -57,6 +57,31 @@ class EqualizerRepository(
         )
     }
 
+    // Keep gain strings compatible with existing Dolby readers. This separate
+    // metadata records whether a named curve was saved using the Pro editor.
+    private val presetBandCounts by lazy {
+        this.context.getSharedPreferences("preset_band_counts", Context.MODE_PRIVATE)
+    }
+
+    private val editorSharedPrefs by lazy {
+        this.context.getSharedPreferences("equalizer_editor", Context.MODE_PRIVATE)
+    }
+
+    val proMode: Boolean get() = editorSharedPrefs.all[PREF_PRO_MODE] as? Boolean ?: false
+
+    val proModeFlow: Flow<Boolean> = callbackFlow {
+        val listener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+            if (key == null || key == PREF_PRO_MODE) trySend(proMode)
+        }
+        editorSharedPrefs.registerOnSharedPreferenceChangeListener(listener)
+        trySend(proMode)
+        awaitClose { editorSharedPrefs.unregisterOnSharedPreferenceChangeListener(listener) }
+    }
+
+    fun setProMode(enabled: Boolean) {
+        editorSharedPrefs.edit().putBoolean(PREF_PRO_MODE, enabled).apply()
+    }
+
     val builtInPresets: List<Preset> by lazy {
         val names = this.context.resources.getStringArray(
             R.array.dolby_preset_entries
@@ -67,7 +92,9 @@ class EqualizerRepository(
         List(names.size) { index ->
             Preset(
                 name = names[index],
-                bandGains = requireNotNull(deserializeGains(presets[index])),
+                bandGains = EqualizerCurve.toStandard(
+                    requireNotNull(EqualizerCurve.deserializeNative(presets[index]))
+                ),
             )
         }
     }
@@ -81,28 +108,41 @@ class EqualizerRepository(
         val listener = SharedPreferences.OnSharedPreferenceChangeListener { _, _ ->
             dlog(TAG, "presetsSharedPrefs changed")
             trySend(
-                presetsSharedPrefs.all.mapNotNull { (key, value) ->
-                    val serialized = value as? String ?: return@mapNotNull null
-                    if (PresetCurveCodec.parseEditable(serialized) == null) {
-                        Log.w(TAG, "Skipping invalid saved preset: $key")
-                        return@mapNotNull null
+                synchronized(presetLock) {
+                    presetsSharedPrefs.all.mapNotNull { (key, value) ->
+                        val serialized = value as? String ?: return@mapNotNull null
+                        if (PresetCurveCodec.parseEditable(serialized) == null) {
+                            Log.w(TAG, "Skipping invalid saved preset: $key")
+                            return@mapNotNull null
+                        }
+                        Preset(
+                            name = key,
+                            bandGains = requireNotNull(EqualizerCurve.deserializeNative(serialized)).let { native ->
+                                val standard = EqualizerCurve.toStandard(native)
+                                // Metadata may be missing after an interrupted write.
+                                // Never discard independent native points in that case.
+                                if (presetBandCounts.all[key] == 20 || EqualizerCurve.toNative(standard) != native) {
+                                    native
+                                } else {
+                                    standard
+                                }
+                            },
+                            isUserDefined = true
+                        )
                     }
-                    Preset(
-                        name = key,
-                        bandGains = requireNotNull(deserializeGains(serialized)),
-                        isUserDefined = true
-                    )
                 }
             )
         }
 
         presetsSharedPrefs.registerOnSharedPreferenceChangeListener(listener)
+        presetBandCounts.registerOnSharedPreferenceChangeListener(listener)
         dlog(TAG, "presetsSharedPrefs registered listener")
         // trigger an initial emission
         listener.onSharedPreferenceChanged(presetsSharedPrefs, null)
 
         awaitClose {
             presetsSharedPrefs.unregisterOnSharedPreferenceChangeListener(listener)
+            presetBandCounts.unregisterOnSharedPreferenceChangeListener(listener)
             dlog(TAG, "presetsSharedPrefs unregistered listener")
         }
     }
@@ -111,12 +151,12 @@ class EqualizerRepository(
         synchronized(dolbyController.settingsLock) {
             val prefs = profileSharedPrefs(profile)
             val stored = prefs.all[PREF_PRESET]
-            val storedGains = (stored as? String)?.let(::deserializeGains)
+            val storedGains = (stored as? String)?.let(EqualizerCurve::deserializeNative)
             if (stored != null && storedGains == null) {
                 Log.w(TAG, "Removing invalid curve for profile $profile")
                 prefs.edit().remove(PREF_PRESET).apply()
             }
-            (storedGains ?: requireNotNull(deserializeGains(dolbyController.getPreset(profile))) {
+            (storedGains ?: requireNotNull(EqualizerCurve.deserializeNative(dolbyController.getPreset(profile))) {
                 "Dolby returned an invalid equalizer curve"
             }).also {
                 dlog(TAG, "getBandGains: $it")
@@ -133,7 +173,7 @@ class EqualizerRepository(
             // A reset invalidates edits queued before it. Do not restore an old curve.
             if (settingsRevision != expectedRevision) return@synchronized false
             dlog(TAG, "setBandGains($bandGains)")
-            val gains = serializeGains(bandGains)
+            val gains = EqualizerCurve.serialize(bandGains)
             dolbyController.setPreset(gains, profile)
             profileSharedPrefs(profile).edit()
                 .putString(PREF_PRESET, gains)
@@ -148,8 +188,10 @@ class EqualizerRepository(
             val name = requireNotNull(preset.name)
             require(isNew || presetsSharedPrefs.contains(name)) { "Preset no longer exists" }
             requirePresetNameAvailable(name, excluding = name.takeUnless { isNew })
+            val serialized = EqualizerCurve.serialize(preset.bandGains)
+            presetBandCounts.edit().putInt(name, preset.bandGains.size).apply()
             presetsSharedPrefs.edit()
-                .putString(name, serializeGains(preset.bandGains))
+                .putString(name, serialized)
                 .apply()
         }
     }
@@ -159,7 +201,7 @@ class EqualizerRepository(
             val name = requireNotNull(preset.name)
             require(isNew || presetsSharedPrefs.contains(name)) { "Preset no longer exists" }
             requirePresetNameAvailable(name, excluding = name.takeUnless { isNew })
-            serializeGains(preset.bandGains)
+            EqualizerCurve.serialize(preset.bandGains)
             Unit
         }
     }
@@ -170,6 +212,7 @@ class EqualizerRepository(
             presetsSharedPrefs.edit()
                 .remove(preset.name)
                 .apply()
+            presetBandCounts.edit().remove(preset.name).apply()
         }
     }
 
@@ -179,9 +222,14 @@ class EqualizerRepository(
             val name = requireNotNull(replacement.name)
             require(presetsSharedPrefs.contains(previous.name)) { "Preset no longer exists" }
             requirePresetNameAvailable(name, excluding = previous.name)
+            val serialized = EqualizerCurve.serialize(replacement.bandGains)
+            presetBandCounts.edit()
+                .remove(previous.name)
+                .putInt(name, replacement.bandGains.size)
+                .apply()
             presetsSharedPrefs.edit()
                 .remove(previous.name)
-                .putString(name, serializeGains(replacement.bandGains))
+                .putString(name, serialized)
                 .apply()
         }
     }
@@ -236,6 +284,7 @@ class EqualizerRepository(
 
     private companion object {
         const val TAG = "EqRepository"
+        const val PREF_PRO_MODE = "pro_mode"
 
         // Only accepted operations run in this process scope. There is no idle
         // worker, and the completed tail is released so it cannot retain a screen.
@@ -243,53 +292,5 @@ class EqualizerRepository(
         private val operationLock = Any()
         private val presetLock = Any()
         private var lastOperation: Job? = null
-
-        val tenBandFreqs = intArrayOf(
-            32,
-            64,
-            125,
-            250,
-            500,
-            1000,
-            2000,
-            4000,
-            8000,
-            16000
-        )
-
-        fun deserializeGains(bandGains: String): List<BandGain>? {
-            val gains = PresetCurveCodec.parseNative(bandGains)?.toList()
-                ?.twentyToTenBandGains() ?: return null
-            return List(10) { index ->
-                BandGain(
-                    band = tenBandFreqs[index],
-                    gain = gains[index]
-                )
-            }
-        }
-
-        fun serializeGains(bandGains: List<BandGain>): String {
-            require(bandGains.size == tenBandFreqs.size && bandGains.withIndex().all { (index, band) ->
-                band.band == tenBandFreqs[index] && band.gain in -100..100
-            }) { "Preset must contain the ten editable bands within the gain range" }
-            return bandGains.map { it.gain }
-                .tenToTwentyBandGains()
-                .joinToString(",")
-        }
-
-        // we show only 10 bands in UI however backend requires 20 bands
-        fun List<Int>.tenToTwentyBandGains() =
-            List<Int>(20) { index ->
-                if (index % 2 == 1 && index < 19) {
-                    // every odd element is the average of its surrounding elements
-                    (this[(index - 1) / 2] + this[(index + 1) / 2]) / 2
-                } else {
-                    this[index / 2]
-                }
-            }
-
-        fun List<Int>.twentyToTenBandGains() =
-            // skip every odd element
-            filterIndexed { index, _ -> index % 2 == 0 }
     }
 }

@@ -12,12 +12,11 @@ import org.json.JSONObject
 import org.json.JSONTokener
 import kotlin.math.roundToInt
 
-/** Reads 10-, 15-, and 20-band .ldp files; exports the ten-band curve used by this editor. */
+/** Keeps ten-band presets compatible and preserves native detail for Pro presets. */
 internal object PresetFileTransfer {
     private const val FORMAT_VERSION = 2
     private const val MAX_FILE_BYTES = 64 * 1024
     private const val MAX_JSON_DEPTH = 32
-    private val frequencies = intArrayOf(32, 64, 125, 250, 500, 1000, 2000, 4000, 8000, 16000)
 
     fun read(context: Context, uri: Uri): Preset {
         val source = context.contentResolver.openInputStream(uri)?.use { input ->
@@ -75,6 +74,13 @@ internal object PresetFileTransfer {
         require(sourceBands.zipWithNext().all { (left, right) -> left.first < right.first }) {
             "Preset frequencies must be in ascending order"
         }
+        // Standard presets retain the original ten-band mapping. Curves with
+        // more points are resampled to the device's actual twenty GEQ bands.
+        val frequencies = if (expectedBands == 10) {
+            EqualizerCurve.standardFrequencies
+        } else {
+            EqualizerCurve.nativeFrequencies
+        }
         val gains = frequencies.map { frequency ->
             val target = kotlin.math.ln(frequency.toDouble())
             val upperIndex = sourceBands.indexOfFirst { kotlin.math.ln(it.first.toDouble()) >= target }
@@ -99,10 +105,7 @@ internal object PresetFileTransfer {
     }
 
     fun write(context: Context, uri: Uri, preset: Preset) {
-        require(preset.bandGains.size == frequencies.size) { "Preset must contain ten bands" }
-        require(preset.bandGains.withIndex().all { (index, band) ->
-            band.band == frequencies[index] && band.gain in -100..100
-        }) { "Preset curve is invalid" }
+        require(EqualizerCurve.isEditable(preset.bandGains)) { "Preset curve is invalid" }
         val name = requireNotNull(preset.name) { "Preset name is invalid" }
         require(name.isNotBlank() && name.length <= 50) { "Preset name is invalid" }
         val json = JSONObject().apply {
@@ -110,12 +113,12 @@ internal object PresetFileTransfer {
             put("name", name)
             put("timestamp", System.currentTimeMillis())
             put("createdBy", "Xiaomi Dolby")
-            put("bandMode", "10")
-            put("bandCount", frequencies.size)
+            put("bandMode", preset.bandGains.size.toString())
+            put("bandCount", preset.bandGains.size)
             put("bandGains", JSONArray().apply {
-                preset.bandGains.forEachIndexed { index, band ->
+                preset.bandGains.forEach { band ->
                     put(JSONObject().apply {
-                        put("frequency", frequencies[index])
+                        put("frequency", band.band)
                         put("gain", band.gain)
                     })
                 }
