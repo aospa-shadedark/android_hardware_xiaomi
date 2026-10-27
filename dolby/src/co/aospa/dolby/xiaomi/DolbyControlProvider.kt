@@ -38,6 +38,9 @@ class DolbyControlProvider : ContentProvider() {
     }
 
     override fun call(method: String, arg: String?, extras: Bundle?): Bundle {
+        requireNotNull(context).enforceCallingOrSelfPermission(
+            PERMISSION_CONTROL, "Dolby control requires the ROM signature"
+        )
         return try {
             when (method) {
                 GET_STATE -> state()
@@ -129,6 +132,7 @@ class DolbyControlProvider : ContentProvider() {
 
     companion object {
         private const val TAG = "DolbyControlProvider"
+        private const val PERMISSION_CONTROL = "co.aospa.dolby.xiaomi.permission.CONTROL"
         private val URI = Uri.parse("content://co.aospa.dolby.xiaomi.control")
         private const val GET_STATE = "get_state"
         private const val SET_ENABLED = "set_enabled"
