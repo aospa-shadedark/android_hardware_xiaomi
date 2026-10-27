@@ -13,6 +13,10 @@
     <uses-permission android:name="android.permission.BLUETOOTH_PRIVILEGED" />
     <uses-permission android:name="android.permission.QUERY_AUDIO_STATE" />
 
+    <permission
+        android:name="co.aospa.dolby.xiaomi.permission.CONTROL"
+        android:protectionLevel="signature" />
+
     <queries>
         <intent>
             <action android:name="android.intent.action.MAIN" />
@@ -91,6 +95,12 @@
             android:name=".SummaryProvider"
             android:authorities="co.aospa.dolby.xiaomi.summary">
         </provider>
+
+        <provider
+            android:name=".DolbyControlProvider"
+            android:authorities="co.aospa.dolby.xiaomi.control"
+            android:permission="co.aospa.dolby.xiaomi.permission.CONTROL"
+            android:exported="true" />
 
     </application>
 </manifest>
