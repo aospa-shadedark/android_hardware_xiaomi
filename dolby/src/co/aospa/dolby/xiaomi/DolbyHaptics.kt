@@ -24,5 +24,5 @@ internal fun View.performDolbySliderReleaseHaptic() {
 }
 
 internal fun View.performDolbySliderTickHaptic() {
-    performHapticFeedback(HapticFeedbackConstants.SEGMENT_FREQUENT_TICK)
+    performHapticFeedback(HapticFeedbackConstants.SEGMENT_TICK)
 }
